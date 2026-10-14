@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+
+# Training outputs
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+runs/
+logs/
+
+# Local datasets / editor
+data/processed/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
