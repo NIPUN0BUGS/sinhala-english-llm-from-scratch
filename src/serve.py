@@ -88,6 +88,7 @@ def make_handler(model, tokenizer):
                 self.send_header("Vary", "Origin")
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
 
         def _json(self, status: int, payload: dict, origin: str | None = None):
