@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", type=Path, default=ROOT / "data/processed/train.txt")
     parser.add_argument("--tokens", type=int, default=100_000, help="Character tokens to process (current tokenizer is character-level).")
-    parser.add_argument("--steps", type=int, default=100, help="Maximum optimizer steps; each step processes batch_size * context_length target tokens.")
+    parser.add_argument("--steps", type=int, default=None, help="Optional maximum optimizer steps; default processes approximately --tokens target tokens.")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--context-length", type=int, default=64)
     parser.add_argument("--output", type=Path, default=ROOT / "benchmark-results/cpu-benchmark.json")
@@ -29,8 +29,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if args.tokens < 1 or args.steps < 1 or args.batch_size < 1 or args.context_length < 4:
-        raise ValueError("tokens/steps/batch-size must be positive; context-length must be >= 4")
+    if args.tokens < 1 or (args.steps is not None and args.steps < 1) or args.batch_size < 1 or args.context_length < 4:
+        raise ValueError("tokens/batch-size must be positive, optional steps must be positive, and context-length must be >= 4")
     if not args.corpus.is_file():
         raise FileNotFoundError(f"Corpus not found: {args.corpus}. Run src.prepare_corpus first.")
     text = args.corpus.read_text(encoding="utf-8")
@@ -54,7 +54,9 @@ def main() -> None:
     criterion = nn.CrossEntropyLoss()
     model.train()
     usable = len(ids) - args.context_length - 1
-    steps = min(args.steps, max(1, math.ceil(usable / (args.batch_size * args.context_length))))
+    steps = max(1, math.ceil((len(ids) - args.context_length) / (args.batch_size * args.context_length)))
+    if args.steps is not None:
+        steps = min(args.steps, steps)
     generator = torch.Generator().manual_seed(42)
     started = time.perf_counter()
     processed = 0
