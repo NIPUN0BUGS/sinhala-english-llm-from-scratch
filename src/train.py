@@ -47,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--context-length", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-steps", type=int, default=None)
     return parser.parse_args()
 
 
@@ -54,6 +55,8 @@ def main() -> None:
     args = parse_args()
     if args.epochs < 1 or args.batch_size < 1:
         raise ValueError("epochs and batch-size must be positive")
+    if args.max_steps is not None and args.max_steps < 1:
+        raise ValueError("--max-steps must be positive when provided")
     if not args.corpus.exists():
         raise FileNotFoundError(f"Training corpus not found: {args.corpus}")
 
@@ -106,6 +109,10 @@ def main() -> None:
         f"Characters: {len(token_ids):,}; vocabulary: {tokenizer.vocab_size}; "
         f"train windows: {len(train_data):,}; validation windows: {len(val_data):,}"
     )
+    import time
+    started_at = time.perf_counter()
+    global_step = 0
+
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
@@ -120,6 +127,10 @@ def main() -> None:
             optimizer.step()
             total_loss += float(loss.detach())
             batches += 1
+            global_step += 1
+
+            if args.max_steps is not None and global_step >= args.max_steps:
+                break
 
         train_loss = total_loss / max(1, batches)
         val_loss = evaluate(model, val_loader, criterion, device)
@@ -127,6 +138,10 @@ def main() -> None:
             f"Epoch {epoch + 1:03d}/{args.epochs} | "
             f"train loss {train_loss:.4f} | val loss {val_loss:.4f}"
         )
+        if args.max_steps is not None and global_step >= args.max_steps:
+            break
+
+    print(f"Optimizer steps: {global_step}; elapsed seconds: {time.perf_counter() - started_at:.2f}")
 
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
