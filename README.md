@@ -109,6 +109,31 @@ Run the corpus utility tests with:
 python -m unittest discover -s tests -p "test_prepare_corpus.py" -v
 ```
 
+## Test the model in the deployed ZEE website
+
+The ZEE chat UI can send messages to this model running on your own Windows PC.
+This keeps PyTorch and the checkpoint off Vercel and avoids uploading the model.
+
+1. Train a checkpoint first. If you used the split-training command above, it is
+   `checkpoints/best.pt`. If you used the default smoke test, use
+   `checkpoints/tiny_transformer.pt` in the next command instead.
+2. In PowerShell, from the LLM repository root, start the local API:
+
+   ```powershell
+   python -m src.serve --checkpoint checkpoints/best.pt --host 127.0.0.1 --port 8766
+   ```
+
+3. Open [ZEE Tiny LLM test mode](https://zee-bay.vercel.app/?tinyLLM=1) in the same
+   computer/browser where the API is running. Send a message in the chat.
+4. To return to normal ZEE mode, open [ZEE](https://zee-bay.vercel.app/) without
+   the `?tinyLLM=1` query parameter.
+
+The local API binds only to loopback and allows browser requests from the ZEE
+production origin and Vite localhost origins. Keep the terminal running while
+testing. Stop it with Ctrl+C. This is an integration smoke test: the current
+small character-level model may produce incoherent text until it is trained on a
+much larger, high-quality Sinhala-English corpus.
+
 ## Generate text
 
 After training:
