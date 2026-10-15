@@ -85,6 +85,38 @@ python -m src.train --epochs 3 --batch-size 4 --context-length 32
 
 The default checkpoint is saved to `checkpoints/tiny_transformer.pt`. Checkpoints are excluded from Git by `.gitignore`.
 
+## Audit corpus quality and checkpoints before training
+
+Run the audit before spending more time training. It reports line counts, duplicate
+records, blank lines, Unicode replacement/mojibake markers, Sinhala/Latin character
+shares, line-length distribution, and Unicode normalization. It can also compare
+exact line overlap between supplied splits and inspect saved checkpoint metadata.
+It does not upload or modify your data.
+
+Audit the original corpus and current 2,000-step checkpoint:
+
+```powershell
+python -m src.audit_corpus --input data/raw/train_from_dev.txt --checkpoint checkpoints/steps2000.pt
+```
+
+If processed splits already exist, audit them and check for exact duplicate lines
+across splits:
+
+```powershell
+python -m src.audit_corpus --input data/processed/train.txt --validation data/processed/validation.txt --test data/processed/test.txt --checkpoint checkpoints/steps2000.pt
+```
+
+Keep the JSON output. Do not train more steps until the report has been reviewed.
+The current checkpoint's saved validation loss is useful only if it was trained on
+a genuine held-out validation set; a sequential split from one concatenated text
+file can produce misleadingly optimistic results.
+
+Run the audit tests:
+
+```powershell
+python -m unittest discover -s tests -p "test_audit_corpus.py" -v
+```
+
 ## Prepare a clean corpus
 
 Use one independent record per non-empty line. Keep a Sinhala-English pair on the
