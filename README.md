@@ -41,6 +41,36 @@ If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process -Execut
 python -m unittest discover -s tests -v
 ```
 
+## Train with separate corpus splits
+
+After preparing `data/processed/train.txt`, `validation.txt`, and `test.txt`,
+train using the explicit splits:
+
+```powershell
+python -m src.train --train-corpus data/processed/train.txt --validation-corpus data/processed/validation.txt --test-corpus data/processed/test.txt --checkpoint checkpoints/best.pt --epochs 20 --batch-size 8 --context-length 64
+```
+
+The tokenizer is fitted only on the training text. Validation loss chooses which
+checkpoint is saved; the held-out test loss is reported once after training using
+that best checkpoint. Do not tune model settings against the test loss. The older
+`--corpus` option remains available for quick smoke tests, but it does not use a
+separate held-out test set.
+
+## Resume training and early stopping
+
+Training saves the best model according to validation loss, along with its optimizer
+and learning-rate scheduler state. To continue from an existing compatible checkpoint,
+use the same corpus splits and model settings:
+
+```powershell
+python -m src.train --train-corpus data/processed/train.txt --validation-corpus data/processed/validation.txt --test-corpus data/processed/test.txt --checkpoint checkpoints/best.pt --epochs 40 --resume
+```
+
+`--epochs` is the target total epoch count, not the number of extra epochs.
+By default, training stops after 5 epochs without a new best validation loss.
+Set `--patience 0` to disable early stopping. Resume requires the same model
+configuration and training vocabulary; use a new checkpoint path to start fresh.
+
 ## Train a smoke-test model
 
 ```powershell
@@ -54,6 +84,30 @@ python -m src.train --epochs 3 --batch-size 4 --context-length 32
 ```
 
 The default checkpoint is saved to `checkpoints/tiny_transformer.pt`. Checkpoints are excluded from Git by `.gitignore`.
+
+## Prepare a clean corpus
+
+Use one independent record per non-empty line. Keep a Sinhala-English pair on the
+same line (for example, separated by a tab) so the pair cannot be split apart.
+The preparation tool normalizes Unicode to NFC, collapses whitespace, removes
+blank lines and exact duplicate records, then creates deterministic train,
+validation, and test files. It reports Unicode replacement characters so encoding
+problems are visible.
+
+```powershell
+python -m src.prepare_corpus --input data/raw/train_from_dev.txt --output-dir data/processed --seed 42
+```
+
+Default split: 90% train, 5% validation, 5% test. The test split must remain held
+out: do not use it for training or tuning. The tool reads UTF-8 text only; convert
+licensed source datasets to the documented line-based format separately. Do not
+use a dataset's devtest/test partition as training material.
+
+Run the corpus utility tests with:
+
+```powershell
+python -m unittest discover -s tests -p "test_prepare_corpus.py" -v
+```
 
 ## Generate text
 
