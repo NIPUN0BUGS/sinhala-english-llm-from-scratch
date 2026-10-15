@@ -56,7 +56,6 @@ def generate(model, tokenizer, prompt: str, max_new_tokens: int, temperature: fl
     if not 0 <= top_k <= 100:
         raise ValueError("top_k must be between 0 and 100")
 
-    torch.manual_seed()
     prompt_ids = tokenizer.encode(prompt)
     if not prompt_ids:
         prompt_ids = tokenizer.encode(tokenizer.unknown_token)
@@ -72,7 +71,8 @@ def generate(model, tokenizer, prompt: str, max_new_tokens: int, temperature: fl
             next_id = torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
             generated = torch.cat((generated, next_id), dim=1)
     all_text = tokenizer.decode(generated[0].tolist())
-    return all_text[len(prompt):].strip() or "(The model did not generate new text.)"
+    decoded_prompt = tokenizer.decode(prompt_ids)
+    return all_text[len(decoded_prompt):].strip() or "(The model did not generate new text.)"
 
 
 def make_handler(model, tokenizer):
