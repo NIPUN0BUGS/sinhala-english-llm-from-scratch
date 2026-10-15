@@ -44,6 +44,8 @@ class TrainIntegrationTests(unittest.TestCase):
             self.assertTrue(checkpoint.is_file())
             saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
             self.assertIn("best_validation_loss", saved)
+            self.assertIn("optimizer_state_dict", saved)
+            self.assertIn("scheduler_state_dict", saved)
             self.assertEqual(saved["training"]["optimizer_steps"], 1)
             self.assertEqual(saved["training"]["test_tokens"], len(test.read_text(encoding="utf-8")))
 
