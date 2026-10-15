@@ -64,6 +64,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument(
+        "--resume", type=Path, default=None,
+        help="Resume from a checkpoint created by this project (same tokenizer/model config required).",
+    )
     return parser.parse_args()
 
 
@@ -145,6 +149,34 @@ def main() -> None:
     model = TinyLanguageModel(**config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
+    resumed_from = None
+    best_val_loss = float("inf")
+    best_epoch = 0
+    if args.resume is not None:
+        if not args.resume.is_file():
+            raise FileNotFoundError(f"Resume checkpoint not found: {args.resume}")
+        try:
+            previous = torch.load(args.resume, map_location=device, weights_only=True)
+        except TypeError:
+            previous = torch.load(args.resume, map_location=device)
+        if "model_state_dict" not in previous or "model_config" not in previous:
+            raise ValueError("Resume checkpoint is missing model_state_dict/model_config.")
+        if previous["model_config"] != config:
+            raise ValueError(
+                "Checkpoint model configuration does not match this run. "
+                "Use the same context length and model settings."
+            )
+        if previous.get("vocabulary") != tokenizer.vocabulary:
+            raise ValueError(
+                "Checkpoint vocabulary differs from the current corpus tokenizer. "
+                "Resume with the original corpus/tokenizer, or start a fresh run."
+            )
+        model.load_state_dict(previous["model_state_dict"])
+        if "optimizer_state_dict" in previous:
+            optimizer.load_state_dict(previous["optimizer_state_dict"])
+        best_val_loss = float(previous.get("best_validation_loss", float("inf")))
+        best_epoch = int(previous.get("best_epoch", 0))
+        resumed_from = str(args.resume)
 
     print(f"Device: {device}; parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(
@@ -154,8 +186,6 @@ def main() -> None:
 
     started_at = time.perf_counter()
     global_step = 0
-    best_val_loss = float("inf")
-    best_epoch = 0
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(args.epochs):
@@ -189,6 +219,7 @@ def main() -> None:
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
                     "model_config": config,
                     "vocabulary": tokenizer.vocabulary,
                     "unknown_token": tokenizer.unknown_token,
@@ -197,6 +228,7 @@ def main() -> None:
                     "best_epoch": best_epoch,
                     "training": {
                         "epochs_requested": args.epochs,
+                        "resumed_from": resumed_from,
                         "optimizer_steps": global_step,
                         "seed": args.seed,
                         "corpus_paths": corpus_paths,
