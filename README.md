@@ -41,6 +41,21 @@ If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope Process -Execut
 python -m unittest discover -s tests -v
 ```
 
+## Train with separate corpus splits
+
+After preparing `data/processed/train.txt`, `validation.txt`, and `test.txt`,
+train using the explicit splits:
+
+```powershell
+python -m src.train --train-corpus data/processed/train.txt --validation-corpus data/processed/validation.txt --test-corpus data/processed/test.txt --checkpoint checkpoints/best.pt --epochs 20 --batch-size 8 --context-length 64
+```
+
+The tokenizer is fitted only on the training text. Validation loss chooses which
+checkpoint is saved; the held-out test loss is reported once after training using
+that best checkpoint. Do not tune model settings against the test loss. The older
+`--corpus` option remains available for quick smoke tests, but it does not use a
+separate held-out test set.
+
 ## Train a smoke-test model
 
 ```powershell
