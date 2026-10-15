@@ -56,20 +56,24 @@ that best checkpoint. Do not tune model settings against the test loss. The olde
 `--corpus` option remains available for quick smoke tests, but it does not use a
 separate held-out test set.
 
-## Resume training and early stopping
+## Resume training from a checkpoint
 
-Training saves the best model according to validation loss, along with its optimizer
-and learning-rate scheduler state. To continue from an existing compatible checkpoint,
-use the same corpus splits and model settings:
+The trainer can continue from a checkpoint produced by this project. Resume requires
+the same model configuration and exact training vocabulary. The optimizer state is
+restored when the checkpoint contains it; older checkpoints without optimizer state
+resume the model weights with a fresh AdamW optimizer.
+
+For example, to continue the existing character-level run using the same source corpus:
 
 ```powershell
-python -m src.train --train-corpus data/processed/train.txt --validation-corpus data/processed/validation.txt --test-corpus data/processed/test.txt --checkpoint checkpoints/best.pt --epochs 40 --resume
+python -m src.train --corpus data/raw/train_from_dev.txt --checkpoint checkpoints/steps2000.pt --resume checkpoints/steps2000.pt --epochs 20 --batch-size 8 --context-length 64
 ```
 
-`--epochs` is the target total epoch count, not the number of extra epochs.
-By default, training stops after 5 epochs without a new best validation loss.
-Set `--patience 0` to disable early stopping. Resume requires the same model
-configuration and training vocabulary; use a new checkpoint path to start fresh.
+Use the same corpus and model settings used to create the checkpoint. If the script
+reports a vocabulary or configuration mismatch, stop rather than forcing incompatible
+weights into the model. `--epochs` is the number of additional epochs in this run.
+The checkpoint is updated only when validation loss improves. The trainer does not
+yet implement automatic early stopping.
 
 ## Train a smoke-test model
 
