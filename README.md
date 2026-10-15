@@ -56,6 +56,21 @@ that best checkpoint. Do not tune model settings against the test loss. The olde
 `--corpus` option remains available for quick smoke tests, but it does not use a
 separate held-out test set.
 
+## Resume training and early stopping
+
+Training saves the best model according to validation loss, along with its optimizer
+and learning-rate scheduler state. To continue from an existing compatible checkpoint,
+use the same corpus splits and model settings:
+
+```powershell
+python -m src.train --train-corpus data/processed/train.txt --validation-corpus data/processed/validation.txt --test-corpus data/processed/test.txt --checkpoint checkpoints/best.pt --epochs 40 --resume
+```
+
+`--epochs` is the target total epoch count, not the number of extra epochs.
+By default, training stops after 5 epochs without a new best validation loss.
+Set `--patience 0` to disable early stopping. Resume requires the same model
+configuration and training vocabulary; use a new checkpoint path to start fresh.
+
 ## Train a smoke-test model
 
 ```powershell
