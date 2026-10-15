@@ -205,3 +205,27 @@ tests/
 ## Data and responsible use
 
 Use only data you have permission to process and redistribute. Record dataset sources and licenses. Keep secrets, tokens, personal information, local environments, model checkpoints, and large datasets out of Git.
+
+
+## From-scratch tokenizer and CPU benchmark
+
+The corpus cleaner keeps adjacent `Sinhala:` and `English:` lines together as a single record before splitting, avoiding bilingual pair leakage across train/validation/test. Outputs are local and ignored by Git.
+
+Run from the repository root in PowerShell:
+
+```powershell
+python -m src.prepare_corpus --input data/raw/train_from_dev.txt --output-dir data/processed --seed 42
+python -m pip install sentencepiece
+python -m src.train_bpe_tokenizer --input data/processed/train.txt --vocab-size 8000
+python -m src.benchmark_cpu --corpus data/processed/train.txt --tokens 100000
+```
+
+The BPE tokenizer is trained from scratch and does not use a pretrained model. It is currently a separate artifact: the existing training model still uses a character tokenizer, so don't treat BPE token counts as equivalent to the benchmark's character-token counts.
+
+The CPU benchmark initializes a fresh random model and loads no checkpoint. It measures training throughput and writes `benchmark-results/cpu-benchmark.json`; its 5M/10M-hour figures are rough throughput extrapolations, not estimates of how long convergence will take. Use the benchmark's actual processed-token count and tokens/second when deciding whether to scale up.
+
+Run tests:
+
+```powershell
+python -m unittest discover -s tests -v
+```
