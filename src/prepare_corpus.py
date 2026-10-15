@@ -8,7 +8,7 @@ import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LANGUAGE_PREFIX = re.compile(r"^(Sinhala|English):\\s*", re.IGNORECASE)
+LANGUAGE_PREFIX = re.compile(r"^(Sinhala|English):\s*", re.IGNORECASE)
 
 
 def clean_records(text: str) -> tuple[list[str], dict[str, int]]:
@@ -33,7 +33,7 @@ def clean_records(text: str) -> tuple[list[str], dict[str, int]]:
             if next_match and next_match.group(1).lower() == "english":
                 si = LANGUAGE_PREFIX.sub("", current, count=1).strip()
                 en = LANGUAGE_PREFIX.sub("", normalized[i + 1], count=1).strip()
-                current = f"Sinhala: {si}\\tEnglish: {en}"
+                current = f"Sinhala: {si}\tEnglish: {en}"
                 stats["paired_records"] += 1
                 i += 1
         records.append(current)

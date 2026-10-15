@@ -9,6 +9,15 @@ import argparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_SPECIAL_TOKENS = [
+    "<|sinhala|>",
+    "<|english|>",
+    "<|code|>",
+    "<|system|>",
+    "<|user|>",
+    "<|assistant|>",
+    "<|tool|>",
+]
 
 
 def main() -> None:
@@ -16,6 +25,12 @@ def main() -> None:
     parser.add_argument("--input", type=Path, default=ROOT / "data/processed/train.txt")
     parser.add_argument("--model-prefix", type=Path, default=ROOT / "artifacts/sinhala_english_bpe")
     parser.add_argument("--vocab-size", type=int, default=8000)
+    parser.add_argument(
+        "--user-symbol",
+        action="append",
+        default=None,
+        help="Add a special token; repeat this option to add multiple tokens.",
+    )
     args = parser.parse_args()
     if args.vocab_size < 256:
         raise ValueError("--vocab-size should be at least 256")
@@ -24,10 +39,16 @@ def main() -> None:
     try:
         import sentencepiece as spm
     except ImportError as exc:
-        raise SystemExit("Install the optional dependency first: python -m pip install sentencepiece") from exc
+        raise SystemExit(
+            "Install the optional dependency first: python -m pip install sentencepiece"
+        ) from exc
+
     text = args.input.read_text(encoding="utf-8")
     if len(text.strip()) < 100:
         raise ValueError("Training text is too small for a useful tokenizer experiment.")
+    special_tokens = list(dict.fromkeys(DEFAULT_SPECIAL_TOKENS + (args.user_symbol or [])))
+    if any(not token.strip() for token in special_tokens):
+        raise ValueError("Special tokens cannot be empty.")
     args.model_prefix.parent.mkdir(parents=True, exist_ok=True)
     spm.SentencePieceTrainer.train(
         input=str(args.input),
@@ -39,13 +60,19 @@ def main() -> None:
         shuffle_input_sentence=False,
         input_sentence_size=0,
         num_threads=4,
-        user_defined_symbols=["<|sinhala|>", "<|english|>", "<|code|>", "<|user|>", "<|assistant|>"],
+        user_defined_symbols=special_tokens,
     )
-    processor = spm.SentencePieceProcessor(model_file=str(args.model_prefix) + ".model")
-    print(f"Tokenizer model: {args.model_prefix}.model")
-    print(f"Vocabulary size: {processor.get_piece_size()}")
+    model_path = Path(str(args.model_prefix) + ".model")
+    processor = spm.SentencePieceProcessor(model_file=str(model_path))
+    print(f"Tokenizer model: {model_path}")
+    print(f"Requested vocabulary size: {args.vocab_size}")
+    print(f"Actual vocabulary size: {processor.get_piece_size()}")
+    print(f"Special tokens: {', '.join(special_tokens)}")
     print(f"Example tokenization: {processor.encode('සිංහල Python code', out_type=str)}")
-    print("Note: the existing TinyLanguageModel currently uses character IDs; this BPE tokenizer is a separate artifact until model/training code is migrated.")
+    print(
+        "Note: training/generation still use CharacterTokenizer. This BPE model is an "
+        "artifact only until BPE support is explicitly selected in those commands."
+    )
 
 
 if __name__ == "__main__":

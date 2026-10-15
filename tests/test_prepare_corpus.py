@@ -15,7 +15,8 @@ class PrepareCorpusTests(unittest.TestCase):
             "Sinhala: ආයුබෝවන්\nEnglish: Hello\n\nSinhala: ස්තුතියි\nEnglish: Thank you\n"
         )
         self.assertEqual(len(records), 2)
-        self.assertIn("Sinhala: ආයුබෝවන්\\tEnglish: Hello", records[0])
+        self.assertIn("Sinhala: ආයුබෝවන්\tEnglish: Hello", records[0])
+        self.assertNotIn("\\t", records[0])
         self.assertEqual(stats["paired_records"], 2)
 
     def test_split_is_deterministic_and_non_overlapping(self) -> None:
