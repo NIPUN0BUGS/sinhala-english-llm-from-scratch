@@ -76,7 +76,7 @@ use a dataset's devtest/test partition as training material.
 Run the corpus utility tests with:
 
 ```powershell
-python -m unittest tests.test_prepare_corpus -v
+python -m unittest discover -s tests -p "test_prepare_corpus.py" -v
 ```
 
 ## Generate text
