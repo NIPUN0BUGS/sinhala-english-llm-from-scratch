@@ -1,43 +1,57 @@
-"""Prepare a clean, reproducible corpus split from UTF-8 text records.
-
-Input format: one independent training record per non-empty line. For bilingual
-pairs, keep both languages on the same line (separated by a tab or space).
-The script does not read parquet files or download data automatically.
-"""
+"""Prepare clean UTF-8 records and keep adjacent Sinhala/English pairs together."""
 from __future__ import annotations
 
 import argparse
 import random
+import re
 import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+LANGUAGE_PREFIX = re.compile(r"^(Sinhala|English):\\s*", re.IGNORECASE)
 
 
 def clean_records(text: str) -> tuple[list[str], dict[str, int]]:
-    """Normalize Unicode/whitespace, remove blank and duplicate records."""
-    records: list[str] = []
-    seen: set[str] = set()
-    stats = {"blank": 0, "duplicates": 0, "replacement_chars": text.count("\ufffd")}
-    for raw in text.splitlines():
-        record = unicodedata.normalize("NFC", " ".join(raw.split()))
-        if not record:
+    """Normalize text, pair adjacent Sinhala/English lines, and remove duplicates."""
+    lines = text.splitlines()
+    normalized: list[str] = []
+    stats = {"blank": 0, "duplicates": 0, "replacement_chars": text.count("\ufffd"), "paired_records": 0}
+    for raw in lines:
+        line = unicodedata.normalize("NFC", " ".join(raw.split()))
+        if not line:
             stats["blank"] += 1
             continue
+        normalized.append(line)
+
+    records: list[str] = []
+    i = 0
+    while i < len(normalized):
+        current = normalized[i]
+        match = LANGUAGE_PREFIX.match(current)
+        if match and match.group(1).lower() == "sinhala" and i + 1 < len(normalized):
+            next_match = LANGUAGE_PREFIX.match(normalized[i + 1])
+            if next_match and next_match.group(1).lower() == "english":
+                si = LANGUAGE_PREFIX.sub("", current, count=1).strip()
+                en = LANGUAGE_PREFIX.sub("", normalized[i + 1], count=1).strip()
+                current = f"Sinhala: {si}\\tEnglish: {en}"
+                stats["paired_records"] += 1
+                i += 1
+        records.append(current)
+        i += 1
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for record in records:
         if record in seen:
             stats["duplicates"] += 1
             continue
         seen.add(record)
-        records.append(record)
-    return records, stats
+        unique.append(record)
+    return unique, stats
 
 
-def split_records(
-    records: list[str],
-    validation_ratio: float = 0.05,
-    test_ratio: float = 0.05,
-    seed: int = 42,
-) -> tuple[list[str], list[str], list[str]]:
+def split_records(records: list[str], validation_ratio: float = 0.05,
+                  test_ratio: float = 0.05, seed: int = 42) -> tuple[list[str], list[str], list[str]]:
     """Create deterministic, non-overlapping train/validation/test splits."""
     if not 0 <= validation_ratio < 1 or not 0 <= test_ratio < 1:
         raise ValueError("Split ratios must be in [0, 1).")
@@ -59,7 +73,7 @@ def split_records(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=ROOT / "data/raw/train.txt")
+    parser.add_argument("--input", type=Path, default=ROOT / "data/raw/train_from_dev.txt")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data/processed")
     parser.add_argument("--validation-ratio", type=float, default=0.05)
     parser.add_argument("--test-ratio", type=float, default=0.05)
@@ -73,14 +87,13 @@ def main() -> None:
         raise FileNotFoundError(f"Input text file not found: {args.input}")
     text = args.input.read_text(encoding="utf-8")
     records, stats = clean_records(text)
-    train, validation, test = split_records(
-        records, args.validation_ratio, args.test_ratio, args.seed
-    )
+    train, validation, test = split_records(records, args.validation_ratio, args.test_ratio, args.seed)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for name, subset in (("train.txt", train), ("validation.txt", validation), ("test.txt", test)):
         (args.output_dir / name).write_text("\n".join(subset) + "\n", encoding="utf-8")
-    print(f"Input records: {len(text.splitlines())}")
+    print(f"Input lines: {len(text.splitlines())}")
     print(f"Unique cleaned records: {len(records)}")
+    print(f"Paired Sinhala-English records: {stats['paired_records']}")
     print(f"Removed blank lines: {stats['blank']}; duplicates: {stats['duplicates']}")
     print(f"Unicode replacement characters found: {stats['replacement_chars']}")
     print(f"Train: {len(train)}; validation: {len(validation)}; test: {len(test)}")
