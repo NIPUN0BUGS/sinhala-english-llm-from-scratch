@@ -156,7 +156,8 @@ This keeps PyTorch and the checkpoint off Vercel and avoids uploading the model.
 2. In PowerShell, from the LLM repository root, start the local API:
 
    ```powershell
-   python -m src.serve --checkpoint checkpoints/best.pt --host 127.0.0.1 --port 8766
+   python -m pip install sentencepiece
+python -m src.serve --checkpoint checkpoints/hourly-bpe-model.pt --host 127.0.0.1 --port 8766
    ```
 
 3. Open [ZEE Tiny LLM test mode](https://zee-bay.vercel.app/?tinyLLM=1) in the same
@@ -166,9 +167,9 @@ This keeps PyTorch and the checkpoint off Vercel and avoids uploading the model.
 
 The local API binds only to loopback and allows browser requests from the ZEE
 production origin and Vite localhost origins. Keep the terminal running while
-testing. Stop it with Ctrl+C. This is an integration smoke test: the current
-small character-level model may produce incoherent text until it is trained on a
-much larger, high-quality Sinhala-English corpus.
+testing. Stop it with Ctrl+C. This is an integration smoke test: the small from-scratch model may produce incoherent
+text until it is trained on a much larger, high-quality Sinhala-English corpus. The BPE
+checkpoint requires the matching artifacts/sinhala_english_bpe.model tokenizer file.
 
 ## Generate text
 
@@ -202,9 +203,9 @@ tests/
 1. Run unit tests and a short local smoke test.
 2. Replace the toy corpus with a larger, permission-cleared Sinhala-English dataset.
 3. Add corpus validation, deduplication, data documentation, and held-out evaluation.
-4. Improve tokenization beyond character-level if experiments justify the added complexity.
-5. Tune model size to available hardware and compare checkpoints using measured validation results.
-6. Build an inference API and website only after the local model has demonstrated useful quality.
+4. Run python -m src.evaluate_bilingual to score fixed translation and QA smoke examples.
+5. Compare checkpoints using validation/test loss and the benchmark's exact-match and character-similarity indicators.
+6. Treat the tiny benchmark as a smoke test, not proof of factual correctness or translation quality.
 
 ## Data and responsible use
 
