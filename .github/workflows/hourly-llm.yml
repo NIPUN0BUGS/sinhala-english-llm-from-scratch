@@ -37,7 +37,7 @@ jobs:
       - name: Refresh Sinhala and English corpus
         id: data
         continue-on-error: true
-        run: python -m src.update_wikipedia_corpus --pages-per-language 2
+        run: python -m src.update_wikipedia_corpus --pages-per-language 3
 
       - name: Prepare current dataset splits
         id: prepare
@@ -53,7 +53,7 @@ jobs:
         continue-on-error: true
         run: python -m unittest discover -s tests -v
 
-      - name: Train one epoch if preparation and tests pass
+      - name: Train three epochs if preparation and tests pass
         id: train
         if: steps.prepare.outcome == 'success' && steps.tests.outcome == 'success'
         continue-on-error: true
@@ -66,7 +66,7 @@ jobs:
             --validation-corpus data/processed/validation.txt
             --test-corpus data/processed/test.txt
             --checkpoint checkpoints/hourly-model.pt
-            --epochs 1
+            --epochs 3
             --batch-size 8
             --context-length 64
           )
