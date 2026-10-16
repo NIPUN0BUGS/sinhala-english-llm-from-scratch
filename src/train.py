@@ -90,12 +90,30 @@ def main() -> None:
     torch.set_num_threads(max(1, min(4, torch.get_num_threads())))
     device = torch.device("cpu")
 
+    previous = None
+    if args.resume is not None:
+        if not args.resume.is_file():
+            raise FileNotFoundError(f"Resume checkpoint not found: {args.resume}")
+        try:
+            previous = torch.load(args.resume, map_location=device, weights_only=True)
+        except TypeError:
+            previous = torch.load(args.resume, map_location=device)
+        if "model_state_dict" not in previous or "model_config" not in previous:
+            raise ValueError("Resume checkpoint is missing model_state_dict/model_config.")
+
     if explicit_splits:
         assert args.train_corpus and args.validation_corpus and args.test_corpus
         train_text = args.train_corpus.read_text(encoding="utf-8")
         if not train_text.strip():
             raise ValueError(f"Training corpus is empty: {args.train_corpus}")
-        tokenizer = CharacterTokenizer().fit(train_text)
+        # Freeze the checkpoint vocabulary when resuming so new corpus characters map
+        # to the unknown token instead of invalidating the model's embedding sizes.
+        if previous is not None and previous.get("vocabulary"):
+            tokenizer = CharacterTokenizer.from_vocabulary(
+                previous["vocabulary"], previous.get("unknown_token", "�")
+            )
+        else:
+            tokenizer = CharacterTokenizer().fit(train_text)
         train_ids = tokenizer.encode(train_text)
         val_ids = read_ids(args.validation_corpus, tokenizer)
         test_ids = read_ids(args.test_corpus, tokenizer)
@@ -108,7 +126,12 @@ def main() -> None:
         if not args.corpus.is_file():
             raise FileNotFoundError(f"Training corpus not found: {args.corpus}")
         text = args.corpus.read_text(encoding="utf-8")
-        tokenizer = CharacterTokenizer().fit(text)
+        if previous is not None and previous.get("vocabulary"):
+            tokenizer = CharacterTokenizer.from_vocabulary(
+                previous["vocabulary"], previous.get("unknown_token", "�")
+            )
+        else:
+            tokenizer = CharacterTokenizer().fit(text)
         token_ids = tokenizer.encode(text)
         if len(token_ids) < 40:
             raise ValueError("Corpus is too short for a train/validation split.")
@@ -152,15 +175,7 @@ def main() -> None:
     resumed_from = None
     best_val_loss = float("inf")
     best_epoch = 0
-    if args.resume is not None:
-        if not args.resume.is_file():
-            raise FileNotFoundError(f"Resume checkpoint not found: {args.resume}")
-        try:
-            previous = torch.load(args.resume, map_location=device, weights_only=True)
-        except TypeError:
-            previous = torch.load(args.resume, map_location=device)
-        if "model_state_dict" not in previous or "model_config" not in previous:
-            raise ValueError("Resume checkpoint is missing model_state_dict/model_config.")
+    if previous is not None:
         if previous["model_config"] != config:
             raise ValueError(
                 "Checkpoint model configuration does not match this run. "
