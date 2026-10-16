@@ -171,6 +171,7 @@ def main() -> None:
     }
     model = TinyLanguageModel(**config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
     criterion = nn.CrossEntropyLoss()
     resumed_from = None
     best_val_loss = float("inf")
@@ -191,6 +192,8 @@ def main() -> None:
         model.load_state_dict(previous["model_state_dict"])
         if "optimizer_state_dict" in previous:
             optimizer.load_state_dict(previous["optimizer_state_dict"])
+        if previous.get("scheduler_state_dict") is not None:
+            scheduler.load_state_dict(previous["scheduler_state_dict"])
         best_val_loss = float(previous.get("best_validation_loss", float("inf")))
         best_epoch = int(previous.get("best_epoch", 0))
         resumed_from = str(args.resume)
@@ -225,6 +228,7 @@ def main() -> None:
 
         train_loss = total_loss / max(1, batches)
         val_loss = evaluate(model, val_loader, criterion, device)
+        scheduler.step(val_loss)
         improved = val_loss < best_val_loss
         print(
             f"Epoch {epoch + 1:03d}/{args.epochs} | train loss {train_loss:.4f} | "
@@ -237,6 +241,7 @@ def main() -> None:
                 {
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
                     "model_config": config,
                     "tokenizer_type": args.tokenizer,
                     "tokenizer_model": str(args.tokenizer_model) if args.tokenizer == "bpe" else None,
