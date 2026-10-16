@@ -75,7 +75,23 @@ jobs:
           if [ -f checkpoints/hourly-bpe-model.pt ]; then
             ARGS+=(--resume checkpoints/hourly-bpe-model.pt)
           fi
-          python "${ARGS[@]}"
+          set -o pipefail
+          python "${ARGS[@]}" 2>&1 | tee training.log
+
+      - name: Evaluate Sinhala and English sample generation
+        id: generation
+        if: steps.train.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            echo "=== Sinhala prompt ==="
+            python -m src.generate --checkpoint checkpoints/hourly-bpe-model.pt --prompt "ආයුබෝවන්. ශ්‍රී ලංකාව ගැන" --max-new-tokens 40 --seed 42
+            echo
+            echo "=== English prompt ==="
+            python -m src.generate --checkpoint checkpoints/hourly-bpe-model.pt --prompt "Hello. Tell me about Sri Lanka" --max-new-tokens 40 --seed 43
+          } 2>&1 | tee generation.log
 
       - name: Save logs
         if: always()
@@ -88,6 +104,8 @@ jobs:
             data/raw/hourly_corpus.txt
             data/processed/
             checkpoints/hourly-bpe-model.pt
+            training.log
+            generation.log
           if-no-files-found: ignore
           retention-days: 14
 
@@ -119,5 +137,9 @@ jobs:
           fi
           if [ "${{ steps.train.outcome }}" != "success" ]; then
             echo "Training failed. Logs are available as workflow artifacts."
+            exit 1
+          fi
+          if [ "${{ steps.generation.outcome }}" != "success" ]; then
+            echo "Generation evaluation failed. Logs are available as workflow artifacts."
             exit 1
           fi
