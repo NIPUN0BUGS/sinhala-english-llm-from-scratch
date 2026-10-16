@@ -69,10 +69,7 @@ def main() -> None:
     print(f"Actual vocabulary size: {processor.get_piece_size()}")
     print(f"Special tokens: {', '.join(special_tokens)}")
     print(f"Example tokenization: {processor.encode('සිංහල Python code', out_type=str)}")
-    print(
-        "Note: training/generation still use CharacterTokenizer. This BPE model is an "
-        "artifact only until BPE support is explicitly selected in those commands."
-    )
+    print("BPE tokenizer is ready for training with: python -m src.train --tokenizer bpe")
 
 
 if __name__ == "__main__":
