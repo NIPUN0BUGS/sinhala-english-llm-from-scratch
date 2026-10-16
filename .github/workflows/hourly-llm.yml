@@ -22,13 +22,12 @@ jobs:
         with:
           ref: feature/tokenizer-cleaning-cpu-benchmark
           fetch-depth: 0
-          token: \${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: Install training dependencies
         run: |
@@ -74,13 +73,13 @@ jobs:
           if [ -f checkpoints/hourly-model.pt ]; then
             ARGS+=(--resume checkpoints/hourly-model.pt)
           fi
-          python "\${ARGS[@]}"
+          python "${ARGS[@]}"
 
       - name: Save logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hourly-llm-logs-\${{ github.run_id }}
+          name: hourly-llm-logs-${{ github.run_id }}
           path: |
             data/raw/wikipedia_manifest.jsonl
             data/raw/external_wikipedia.txt
@@ -108,15 +107,15 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [ "\${{ steps.prepare.outcome }}" != "success" ]; then
+          if [ "${{ steps.prepare.outcome }}" != "success" ]; then
             echo "Corpus preparation failed."
             exit 1
           fi
-          if [ "\${{ steps.tests.outcome }}" != "success" ]; then
+          if [ "${{ steps.tests.outcome }}" != "success" ]; then
             echo "Tests failed. Logs are available as workflow artifacts; automatic arbitrary code repair is not configured."
             exit 1
           fi
-          if [ "\${{ steps.train.outcome }}" != "success" ]; then
+          if [ "${{ steps.train.outcome }}" != "success" ]; then
             echo "Training failed. Logs are available as workflow artifacts."
             exit 1
           fi
