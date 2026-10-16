@@ -6,13 +6,31 @@ from dataclasses import dataclass
 
 @dataclass
 class CharacterTokenizer:
-    """Map each Unicode character to an integer ID, preserving round trips."""
+    """Map Unicode characters to IDs; simple and transparent for early experiments."""
 
     unknown_token: str = "�"
 
     def __post_init__(self) -> None:
         self._char_to_id: dict[str, int] = {}
         self._id_to_char: list[str] = []
+
+    @classmethod
+    def from_vocabulary(
+        cls, vocabulary: list[str], unknown_token: str = "�"
+    ) -> "CharacterTokenizer":
+        """Restore a tokenizer from a saved vocabulary."""
+        if not vocabulary:
+            raise ValueError("Vocabulary cannot be empty.")
+        if len(set(vocabulary)) != len(vocabulary):
+            raise ValueError("Vocabulary contains duplicate characters.")
+        if unknown_token not in vocabulary:
+            raise ValueError("Vocabulary must include the unknown token.")
+        tokenizer = cls(unknown_token=unknown_token)
+        tokenizer._id_to_char = list(vocabulary)
+        tokenizer._char_to_id = {
+            char: idx for idx, char in enumerate(tokenizer._id_to_char)
+        }
+        return tokenizer
 
     def fit(self, text: str) -> "CharacterTokenizer":
         if not text:
@@ -25,6 +43,11 @@ class CharacterTokenizer:
     @property
     def vocab_size(self) -> int:
         return len(self._id_to_char)
+
+    @property
+    def vocabulary(self) -> list[str]:
+        """Return a copy of the ordered vocabulary."""
+        return list(self._id_to_char)
 
     def encode(self, text: str) -> list[int]:
         if not self._char_to_id:

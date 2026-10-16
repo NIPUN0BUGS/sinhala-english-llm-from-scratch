@@ -17,6 +17,13 @@ class CharacterTokenizerTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             CharacterTokenizer().encode("hi")
 
+    def test_vocabulary_can_be_restored(self) -> None:
+        sample = "Hello ආයුබෝවන්!"
+        original = CharacterTokenizer().fit(sample)
+        restored = CharacterTokenizer.from_vocabulary(original.vocabulary)
+        self.assertEqual(restored.encode(sample), original.encode(sample))
+        self.assertEqual(restored.decode(original.encode(sample)), sample)
+
 
 if __name__ == "__main__":
     unittest.main()
