@@ -30,7 +30,7 @@ while ($true) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     Write-Log "Starting hourly cycle $stamp"
 
-    # Add a few unique, public-domain-free but openly licensed Wikimedia text extracts.
+    # Add a few unique, openly licensed Wikimedia text extracts.
     # Wikipedia text is CC BY-SA; URLs and license metadata are retained in the manifest.
     $dataLog = Join-Path $LogDir "data-update-$stamp.log"
     $dataExit = Invoke-LoggedPython @("-m","src.update_wikipedia_corpus","--pages-per-language","2") $dataLog
