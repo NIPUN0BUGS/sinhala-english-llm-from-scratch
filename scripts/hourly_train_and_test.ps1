@@ -33,7 +33,7 @@ while ($true) {
     if ($testExit -eq 0) {
         Write-Log "Tests passed. Checking processed corpus splits."
         if ((Test-Path $TrainCorpus) -and (Test-Path $ValCorpus) -and (Test-Path $TestCorpus)) {
-            $trainExit = Invoke-LoggedPython @(
+            $trainArgs = @(
                 "-m","src.train",
                 "--train-corpus",$TrainCorpus,
                 "--validation-corpus",$ValCorpus,
@@ -42,7 +42,11 @@ while ($true) {
                 "--epochs","1",
                 "--batch-size","8",
                 "--context-length","64"
-            ) $trainLog
+            )
+            if (Test-Path $Checkpoint) {
+                $trainArgs += @("--resume", $Checkpoint)
+            }
+            $trainExit = Invoke-LoggedPython $trainArgs $trainLog
             if ($trainExit -eq 0) {
                 Write-Log "Training completed successfully. Checkpoint: $Checkpoint"
             } else {
