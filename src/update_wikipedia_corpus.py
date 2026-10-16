@@ -17,6 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "data" / "raw" / "wikipedia_manifest.jsonl"
 DEFAULT_TEXT = ROOT / "data" / "raw" / "external_wikipedia.txt"
+DEFAULT_BASE = ROOT / "data" / "raw" / "train_from_dev.txt"
+DEFAULT_COMBINED = ROOT / "data" / "raw" / "hourly_corpus.txt"
 LICENSE_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
 USER_AGENT = "SinhalaEnglishLLMResearchBot/1.0 (local educational dataset collector)"
 
@@ -83,6 +85,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--output", type=Path, default=DEFAULT_TEXT)
+    parser.add_argument("--base-input", type=Path, default=DEFAULT_BASE)
+    parser.add_argument("--combined-output", type=Path, default=DEFAULT_COMBINED)
     parser.add_argument("--pages-per-language", type=int, default=2)
     args = parser.parse_args()
     if not 1 <= args.pages_per_language <= 5:
@@ -123,9 +127,19 @@ def main() -> int:
     print(f"Attribution/license manifest: {args.manifest}")
     for error in errors:
         print(f"WARNING: {error}")
-    if not existing:
-        print("WARNING: No Wikipedia extracts available yet; check internet access.")
+
+    # Keep the existing seed corpus and append collected Wikipedia extracts.
+    if not args.base_input.is_file():
+        print(f"ERROR: Base corpus not found: {args.base_input}")
         return 1
+    base_text = args.base_input.read_text(encoding="utf-8").strip()
+    external_text = args.output.read_text(encoding="utf-8").strip() if args.output.exists() else ""
+    args.combined_output.parent.mkdir(parents=True, exist_ok=True)
+    combined_parts = [part for part in (base_text, external_text) if part]
+    args.combined_output.write_text("\n".join(combined_parts) + "\n", encoding="utf-8")
+    print(f"Combined training source: {args.combined_output}")
+    if not added:
+        print("No new unique pages this cycle; existing collected pages remain in the corpus.")
     return 0
 
 
