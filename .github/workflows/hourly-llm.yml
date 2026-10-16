@@ -32,7 +32,7 @@ jobs:
       - name: Install training dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch
+          python -m pip install torch sentencepiece
 
       - name: Refresh Sinhala and English corpus
         id: data
@@ -65,7 +65,9 @@ jobs:
             --train-corpus data/processed/train.txt
             --validation-corpus data/processed/validation.txt
             --test-corpus data/processed/test.txt
-            --checkpoint checkpoints/hourly-model.pt
+            --checkpoint checkpoints/hourly-bpe-model.pt
+            --tokenizer bpe
+            --tokenizer-model artifacts/sinhala_english_bpe.model
             --epochs 3
             --batch-size 8
             --context-length 64
