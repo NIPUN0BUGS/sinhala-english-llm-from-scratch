@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from src.dataset import NextTokenDataset
 from src.model import TinyLanguageModel
-from src.tokenizer import CharacterTokenizer
+from src.tokenizer import CharacterTokenizer, SentencePieceBPETokenizer
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CORPUS_PATH = ROOT / "data" / "raw" / "train.txt"
@@ -39,7 +39,7 @@ def evaluate(
     return total_loss / max(1, batches)
 
 
-def read_ids(path: Path, tokenizer: CharacterTokenizer) -> list[int]:
+def read_ids(path: Path, tokenizer) -> list[int]:
     if not path.is_file():
         raise FileNotFoundError(f"Corpus file not found: {path}")
     text = path.read_text(encoding="utf-8")
@@ -58,6 +58,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-corpus", type=Path, default=None)
     parser.add_argument("--test-corpus", type=Path, default=None)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT_PATH)
+    parser.add_argument("--tokenizer", choices=("character", "bpe"), default="character")
+    parser.add_argument("--tokenizer-model", type=Path, default=ROOT / "artifacts" / "sinhala_english_bpe.model")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--context-length", type=int, default=64)
@@ -101,19 +103,22 @@ def main() -> None:
         if "model_state_dict" not in previous or "model_config" not in previous:
             raise ValueError("Resume checkpoint is missing model_state_dict/model_config.")
 
+    if previous is not None and previous.get("tokenizer_type", "character") != args.tokenizer:
+        raise ValueError("Checkpoint tokenizer type differs from --tokenizer. Use a separate checkpoint for each tokenizer.")
+
+    def make_tokenizer(training_text: str):
+        if args.tokenizer == "bpe":
+            return SentencePieceBPETokenizer(str(args.tokenizer_model))
+        if previous is not None and previous.get("vocabulary"):
+            return CharacterTokenizer.from_vocabulary(previous["vocabulary"], previous.get("unknown_token", "�"))
+        return CharacterTokenizer().fit(training_text)
+
     if explicit_splits:
         assert args.train_corpus and args.validation_corpus and args.test_corpus
         train_text = args.train_corpus.read_text(encoding="utf-8")
         if not train_text.strip():
             raise ValueError(f"Training corpus is empty: {args.train_corpus}")
-        # Freeze the checkpoint vocabulary when resuming so new corpus characters map
-        # to the unknown token instead of invalidating the model's embedding sizes.
-        if previous is not None and previous.get("vocabulary"):
-            tokenizer = CharacterTokenizer.from_vocabulary(
-                previous["vocabulary"], previous.get("unknown_token", "�")
-            )
-        else:
-            tokenizer = CharacterTokenizer().fit(train_text)
+        tokenizer = make_tokenizer(train_text)
         train_ids = tokenizer.encode(train_text)
         val_ids = read_ids(args.validation_corpus, tokenizer)
         test_ids = read_ids(args.test_corpus, tokenizer)
@@ -126,12 +131,7 @@ def main() -> None:
         if not args.corpus.is_file():
             raise FileNotFoundError(f"Training corpus not found: {args.corpus}")
         text = args.corpus.read_text(encoding="utf-8")
-        if previous is not None and previous.get("vocabulary"):
-            tokenizer = CharacterTokenizer.from_vocabulary(
-                previous["vocabulary"], previous.get("unknown_token", "�")
-            )
-        else:
-            tokenizer = CharacterTokenizer().fit(text)
+        tokenizer = make_tokenizer(text)
         token_ids = tokenizer.encode(text)
         if len(token_ids) < 40:
             raise ValueError("Corpus is too short for a train/validation split.")
@@ -181,11 +181,13 @@ def main() -> None:
                 "Checkpoint model configuration does not match this run. "
                 "Use the same context length and model settings."
             )
-        if previous.get("vocabulary") != tokenizer.vocabulary:
+        if args.tokenizer == "character" and previous.get("vocabulary") != tokenizer.vocabulary:
             raise ValueError(
                 "Checkpoint vocabulary differs from the current corpus tokenizer. "
                 "Resume with the original corpus/tokenizer, or start a fresh run."
             )
+        if args.tokenizer == "bpe" and previous.get("tokenizer_model") != str(args.tokenizer_model):
+            raise ValueError("Checkpoint BPE model path differs from --tokenizer-model.")
         model.load_state_dict(previous["model_state_dict"])
         if "optimizer_state_dict" in previous:
             optimizer.load_state_dict(previous["optimizer_state_dict"])
@@ -236,8 +238,10 @@ def main() -> None:
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "model_config": config,
-                    "vocabulary": tokenizer.vocabulary,
-                    "unknown_token": tokenizer.unknown_token,
+                    "tokenizer_type": args.tokenizer,
+                    "tokenizer_model": str(args.tokenizer_model) if args.tokenizer == "bpe" else None,
+                    "vocabulary": tokenizer.vocabulary if args.tokenizer == "character" else None,
+                    "unknown_token": tokenizer.unknown_token if args.tokenizer == "character" else None,
                     "context_length": context_length,
                     "best_validation_loss": best_val_loss,
                     "best_epoch": best_epoch,
@@ -268,7 +272,7 @@ def main() -> None:
         test_loss = evaluate(model, test_loader, criterion, device)
         print(f"Held-out test loss (best checkpoint): {test_loss:.4f}")
     print(f"Saved best-validation checkpoint: {args.checkpoint}")
-    print("Note: a small character-level model and tiny corpus are not enough for general-purpose chat.")
+    print(f"Tokenizer: {args.tokenizer}; a small model and limited corpus are not enough for general-purpose chat.")
 
 
 if __name__ == "__main__":
