@@ -72,8 +72,8 @@ jobs:
             --batch-size 8
             --context-length 64
           )
-          if [ -f checkpoints/hourly-model.pt ]; then
-            ARGS+=(--resume checkpoints/hourly-model.pt)
+          if [ -f checkpoints/hourly-bpe-model.pt ]; then
+            ARGS+=(--resume checkpoints/hourly-bpe-model.pt)
           fi
           python "${ARGS[@]}"
 
@@ -87,7 +87,7 @@ jobs:
             data/raw/external_wikipedia.txt
             data/raw/hourly_corpus.txt
             data/processed/
-            checkpoints/hourly-model.pt
+            checkpoints/hourly-bpe-model.pt
           if-no-files-found: ignore
           retention-days: 14
 
@@ -97,7 +97,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f data/raw/wikipedia_manifest.jsonl data/raw/external_wikipedia.txt data/raw/hourly_corpus.txt checkpoints/hourly-model.pt 2>/dev/null || true
+          git add -f data/raw/wikipedia_manifest.jsonl data/raw/external_wikipedia.txt data/raw/hourly_corpus.txt checkpoints/hourly-bpe-model.pt 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No persistent corpus/checkpoint changes to push."
           else
