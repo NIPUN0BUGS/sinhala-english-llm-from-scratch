@@ -233,3 +233,38 @@ Run tests:
 ```powershell
 python -m unittest discover -s tests -v
 ```
+
+
+## Hourly corpus growth and training (Windows)
+
+The PowerShell runner now attempts to collect up to two new article extracts per language
+from Sinhala and English Wikipedia on each hourly cycle, using the MediaWiki API. It
+stores unique page IDs, source URLs, fetch timestamps, and license metadata in
+`data/raw/wikipedia_manifest.jsonl`. Text is stored in
+`data/raw/external_wikipedia.txt`; the seed corpus and collected text are combined into
+`data/raw/hourly_corpus.txt`, then the train/validation/test splits are rebuilt before
+tests and training. New content is only collected when internet access and the Wikimedia
+API are available. If no new pages are found, existing data is retained.
+
+Wikipedia text is generally available under CC BY-SA 4.0; preserve attribution and review
+the [Wikimedia Terms of Use](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use)
+and [CC BY-SA 4.0 license](https://creativecommons.org/licenses/by-sa/4.0/) before
+redistributing collected data or model outputs. The manifest keeps source URLs and license
+information; it is not a substitute for reviewing each source's applicable terms.
+
+Before resuming a checkpoint while the corpus grows, the trainer now reuses the checkpoint's
+existing character vocabulary. Previously unseen characters are mapped to the unknown
+token; this avoids a vocabulary-size mismatch but means the current character-level model
+does not learn new character IDs. SentencePiece BPE is still not integrated into the model.
+
+Run the hourly loop manually if Task Scheduler registration is blocked by Windows permissions:
+
+```powershell
+cd D:\llm\my-llm-git
+git pull --ff-only origin feature/tokenizer-cleaning-cpu-benchmark
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\hourly_train_and_test.ps1
+```
+
+Keep that PowerShell window open and the PC awake. The script sleeps for one hour between
+cycles. It adds data and retries on the next cycle, but it does **not** automatically repair
+source-code failures. Logs are written to `training-logs`.
