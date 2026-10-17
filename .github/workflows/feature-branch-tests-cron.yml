@@ -41,6 +41,28 @@ jobs:
       - name: Validate training CLI
         run: python -m src.train --help
 
+
+      - name: Build CPU Docker image
+        run: docker build --tag tiny-sinhala-english-llm:ci .
+
+      - name: Start container and verify API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name tiny-llm-api-ci -p 8766:8766 tiny-sinhala-english-llm:ci
+          cleanup() { docker stop tiny-llm-api-ci >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8766/health; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Tiny LLM API did not become healthy. Container logs:"
+          docker logs tiny-llm-api-ci
+          exit 1
+
       - name: Validate BPE tokenizer artifact
         run: |
           python - <<'PY'
