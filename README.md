@@ -56,20 +56,24 @@ that best checkpoint. Do not tune model settings against the test loss. The olde
 `--corpus` option remains available for quick smoke tests, but it does not use a
 separate held-out test set.
 
-## Resume training and early stopping
+## Resume training from a checkpoint
 
-Training saves the best model according to validation loss, along with its optimizer
-and learning-rate scheduler state. To continue from an existing compatible checkpoint,
-use the same corpus splits and model settings:
+The trainer can continue from a checkpoint produced by this project. Resume requires
+the same model configuration and exact training vocabulary. The optimizer state is
+restored when the checkpoint contains it; older checkpoints without optimizer state
+resume the model weights with a fresh AdamW optimizer.
+
+For example, to continue the existing character-level run using the same source corpus:
 
 ```powershell
-python -m src.train --train-corpus data/processed/train.txt --validation-corpus data/processed/validation.txt --test-corpus data/processed/test.txt --checkpoint checkpoints/best.pt --epochs 40 --resume
+python -m src.train --corpus data/raw/train_from_dev.txt --checkpoint checkpoints/steps2000.pt --resume checkpoints/steps2000.pt --epochs 20 --batch-size 8 --context-length 64
 ```
 
-`--epochs` is the target total epoch count, not the number of extra epochs.
-By default, training stops after 5 epochs without a new best validation loss.
-Set `--patience 0` to disable early stopping. Resume requires the same model
-configuration and training vocabulary; use a new checkpoint path to start fresh.
+Use the same corpus and model settings used to create the checkpoint. If the script
+reports a vocabulary or configuration mismatch, stop rather than forcing incompatible
+weights into the model. `--epochs` is the number of additional epochs in this run.
+The checkpoint is updated only when validation loss improves. The trainer does not
+yet implement automatic early stopping.
 
 ## Train a smoke-test model
 
@@ -152,7 +156,8 @@ This keeps PyTorch and the checkpoint off Vercel and avoids uploading the model.
 2. In PowerShell, from the LLM repository root, start the local API:
 
    ```powershell
-   python -m src.serve --checkpoint checkpoints/best.pt --host 127.0.0.1 --port 8766
+   python -m pip install sentencepiece
+python -m src.serve --checkpoint checkpoints/hourly-bpe-model.pt --host 127.0.0.1 --port 8766
    ```
 
 3. Open [ZEE Tiny LLM test mode](https://zee-bay.vercel.app/?tinyLLM=1) in the same
@@ -162,9 +167,9 @@ This keeps PyTorch and the checkpoint off Vercel and avoids uploading the model.
 
 The local API binds only to loopback and allows browser requests from the ZEE
 production origin and Vite localhost origins. Keep the terminal running while
-testing. Stop it with Ctrl+C. This is an integration smoke test: the current
-small character-level model may produce incoherent text until it is trained on a
-much larger, high-quality Sinhala-English corpus.
+testing. Stop it with Ctrl+C. This is an integration smoke test: the small from-scratch model may produce incoherent
+text until it is trained on a much larger, high-quality Sinhala-English corpus. The BPE
+checkpoint requires the matching artifacts/sinhala_english_bpe.model tokenizer file.
 
 ## Generate text
 
@@ -198,10 +203,69 @@ tests/
 1. Run unit tests and a short local smoke test.
 2. Replace the toy corpus with a larger, permission-cleared Sinhala-English dataset.
 3. Add corpus validation, deduplication, data documentation, and held-out evaluation.
-4. Improve tokenization beyond character-level if experiments justify the added complexity.
-5. Tune model size to available hardware and compare checkpoints using measured validation results.
-6. Build an inference API and website only after the local model has demonstrated useful quality.
+4. Run python -m src.evaluate_bilingual to score fixed translation and QA smoke examples.
+5. Compare checkpoints using validation/test loss and the benchmark's exact-match and character-similarity indicators.
+6. Treat the tiny benchmark as a smoke test, not proof of factual correctness or translation quality.
 
 ## Data and responsible use
 
 Use only data you have permission to process and redistribute. Record dataset sources and licenses. Keep secrets, tokens, personal information, local environments, model checkpoints, and large datasets out of Git.
+
+
+## From-scratch tokenizer and CPU benchmark
+
+The corpus cleaner keeps adjacent `Sinhala:` and `English:` lines together as a single record before splitting, avoiding bilingual pair leakage across train/validation/test. Outputs are local and ignored by Git.
+
+Run from the repository root in PowerShell:
+
+```powershell
+python -m src.prepare_corpus --input data/raw/train_from_dev.txt --output-dir data/processed --seed 42
+python -m pip install sentencepiece
+python -m src.train_bpe_tokenizer --input data/processed/train.txt --vocab-size 8000
+python -m src.benchmark_cpu --corpus data/processed/train.txt --tokens 100000
+```
+
+The BPE tokenizer is trained from scratch and does not use a pretrained model. It is currently a separate artifact: the existing training model still uses a character tokenizer, so don't treat BPE token counts as equivalent to the benchmark's character-token counts.
+
+The CPU benchmark initializes a fresh random model and loads no checkpoint. It measures training throughput and writes `benchmark-results/cpu-benchmark.json`; its 5M/10M-hour figures are rough throughput extrapolations, not estimates of how long convergence will take. Use the benchmark's actual processed-token count and tokens/second when deciding whether to scale up.
+
+Run tests:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+
+## Hourly corpus growth and training (Windows)
+
+The PowerShell runner now attempts to collect up to two new article extracts per language
+from Sinhala and English Wikipedia on each hourly cycle, using the MediaWiki API. It
+stores unique page IDs, source URLs, fetch timestamps, and license metadata in
+`data/raw/wikipedia_manifest.jsonl`. Text is stored in
+`data/raw/external_wikipedia.txt`; the seed corpus and collected text are combined into
+`data/raw/hourly_corpus.txt`, then the train/validation/test splits are rebuilt before
+tests and training. New content is only collected when internet access and the Wikimedia
+API are available. If no new pages are found, existing data is retained.
+
+Wikipedia text is generally available under CC BY-SA 4.0; preserve attribution and review
+the [Wikimedia Terms of Use](https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use)
+and [CC BY-SA 4.0 license](https://creativecommons.org/licenses/by-sa/4.0/) before
+redistributing collected data or model outputs. The manifest keeps source URLs and license
+information; it is not a substitute for reviewing each source's applicable terms.
+
+Before resuming a checkpoint while the corpus grows, the trainer now reuses the checkpoint's
+existing character vocabulary. Previously unseen characters are mapped to the unknown
+token; this avoids a vocabulary-size mismatch but means the current character-level model
+does not learn new character IDs. SentencePiece BPE is still not integrated into the model.
+
+Run the hourly loop manually if Task Scheduler registration is blocked by Windows permissions:
+
+```powershell
+cd D:\llm\my-llm-git
+git pull --ff-only origin feature/tokenizer-cleaning-cpu-benchmark
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\hourly_train_and_test.ps1
+```
+
+Keep that PowerShell window open and the PC awake. The script sleeps for one hour between
+cycles. It adds data and retries on the next cycle, but it does **not** automatically repair
+source-code failures. Logs are written to `training-logs`.
