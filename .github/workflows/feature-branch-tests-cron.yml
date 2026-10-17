@@ -1,0 +1,59 @@
+name: Scheduled feature branch tests
+
+on:
+  schedule:
+    # Run every 6 hours (UTC); GitHub scheduled workflows run from the default branch.
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-feature-branch-tests
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out tokenizer and CPU benchmark branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/tokenizer-cleaning-cpu-benchmark
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install CPU test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy sentencepiece
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Run project tests
+        run: python -m pytest -q tests
+
+      - name: Validate training CLI
+        run: python -m src.train --help
+
+      - name: Validate BPE tokenizer artifact
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from src.tokenizer import SentencePieceBPETokenizer
+
+          model = Path("artifacts/sinhala_english_bpe.model")
+          if not model.is_file():
+              raise SystemExit(f"Missing tokenizer model: {model}")
+          tokenizer = SentencePieceBPETokenizer(str(model))
+          for text in ("ආයුබෝවන් ශ්‍රී ලංකාව", "Hello Sri Lanka"):
+              ids = tokenizer.encode(text)
+              if not ids:
+                  raise SystemExit(f"Tokenizer returned no tokens for: {text!r}")
+              print(f"OK: {text!r} -> {len(ids)} tokens")
+          PY
