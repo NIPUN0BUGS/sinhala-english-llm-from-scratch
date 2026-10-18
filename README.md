@@ -269,3 +269,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\hourly_train_and_t
 Keep that PowerShell window open and the PC awake. The script sleeps for one hour between
 cycles. It adds data and retries on the next cycle, but it does **not** automatically repair
 source-code failures. Logs are written to `training-logs`.
+
+## Keep ZEE synchronized with the latest trained checkpoint
+
+The hosted API uses the same Docker image as the scheduled tests. `render.yaml` defines a Render web service for the model API; its `TINY_LLM_API_KEY` must be set in Render as a secret. The API refuses non-loopback binding if this key is missing and checks `X-API-Key` on generation requests.
+
+### One-time hosting setup
+
+1. Create a Render Blueprint from this repository and select branch `feature/tokenizer-cleaning-cpu-benchmark`; use the service defined in `render.yaml`.
+2. In Render, set `TINY_LLM_API_KEY` to a long random secret. Keep it private.
+3. Copy the service's HTTPS URL (for example, `https://your-service.onrender.com`) and set `TINY_LLM_BASE_URL` to that URL in the Vercel project running ZEE.
+4. Set the exact same `TINY_LLM_API_KEY` in ZEE's Vercel server-side environment variables. Never use a `VITE_*` prefix for this key.
+5. In Render, create a deploy hook for the service. Add its URL to the LLM GitHub repository's Actions secrets as `RENDER_DEPLOY_HOOK`.
+6. Redeploy the ZEE Vercel project so its server-side environment variables take effect.
+
+### Automatic sync behavior
+
+The hourly workflow trains and commits the checkpoint. When the checkpoint file changes, it calls `RENDER_DEPLOY_HOOK` to redeploy the Render service from the latest feature-branch commit, which rebuilds the Docker image with the newest checkpoint. If the GitHub secret is absent, the workflow emits a warning rather than claiming the hosted model was synchronized.
+
+The free Render plan may spin down when idle and can introduce cold-start delays. Choose an always-on paid plan if you require the API to be available without cold starts. GitHub Actions alone cannot keep the API continuously running.
