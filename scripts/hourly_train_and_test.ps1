@@ -4,7 +4,7 @@ $ErrorActionPreference = "Continue"
 $Repo = "D:\llm\my-llm-git"
 $Python = "D:\llm\my-llm\.venv\Scripts\python.exe"
 $LogDir = Join-Path $Repo "training-logs"
-$Checkpoint = Join-Path $Repo "checkpoints\hourly-model.pt"
+$Checkpoint = Join-Path $Repo "checkpoints\hourly-bpe-model.pt"
 $BaseCorpus = Join-Path $Repo "data\raw\train_from_dev.txt"
 $CombinedCorpus = Join-Path $Repo "data\raw\hourly_corpus.txt"
 $TrainCorpus = Join-Path $Repo "data\processed\train.txt"
@@ -33,7 +33,7 @@ while ($true) {
     # Add a few unique, openly licensed Wikimedia text extracts.
     # Wikipedia text is CC BY-SA; URLs and license metadata are retained in the manifest.
     $dataLog = Join-Path $LogDir "data-update-$stamp.log"
-    $dataExit = Invoke-LoggedPython @("-m","src.update_wikipedia_corpus","--pages-per-language","2") $dataLog
+    $dataExit = Invoke-LoggedPython @("-m","src.update_wikipedia_corpus","--pages-per-language","5") $dataLog
     if ($dataExit -eq 0) {
         Write-Log "Dataset refresh completed. New page counts and source attribution are in $dataLog and data\raw\wikipedia_manifest.jsonl."
     } else {
@@ -66,6 +66,8 @@ while ($true) {
                 "--validation-corpus",$ValCorpus,
                 "--test-corpus",$TestCorpus,
                 "--checkpoint",$Checkpoint,
+                "--tokenizer","bpe",
+                "--tokenizer-model",(Join-Path $Repo "artifacts\sinhala_english_bpe.model"),
                 "--epochs","1",
                 "--batch-size","8",
                 "--context-length","64"
