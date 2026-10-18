@@ -32,7 +32,12 @@ jobs:
       - name: Install training dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install torch sentencepiece
+          python -m pip install torch sentencepiece pytest numpy
+          python -m pip check
+          python - <<'PY'
+          import numpy, pytest, sentencepiece, torch
+          print(f"Training dependencies ready: torch={torch.__version__}, numpy={numpy.__version__}, sentencepiece={sentencepiece.__version__}, pytest={pytest.__version__}")
+          PY
 
       - name: Refresh Sinhala and English corpus
         id: data
