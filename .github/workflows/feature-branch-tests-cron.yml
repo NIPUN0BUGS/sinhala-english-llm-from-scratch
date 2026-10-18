@@ -40,6 +40,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest numpy sentencepiece
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip check
+          python - <<'PY'
+          import numpy, pytest, sentencepiece, torch
+          print(f"Python dependencies ready: torch={torch.__version__}, numpy={numpy.__version__}, sentencepiece={sentencepiece.__version__}, pytest={pytest.__version__}")
+          assert not torch.cuda.is_available(), "CI should use the CPU-only PyTorch build"
+          PY
 
       - name: Run project tests
         run: python -m pytest -q tests
