@@ -238,8 +238,10 @@ python -m unittest discover -s tests -v
 
 ## Hourly corpus growth and training (Windows)
 
-The PowerShell runner now attempts to collect up to two new article extracts per language
-from Sinhala and English Wikipedia on each hourly cycle, using the MediaWiki API. It
+The PowerShell runner attempts to collect up to five new article extracts per language
+from Sinhala and English Wikipedia on each hourly cycle, using the MediaWiki API. It trains
+with the existing SentencePiece BPE tokenizer and writes a separate
+`checkpoints/hourly-bpe-model.pt` checkpoint so it does not mix incompatible character-tokenized weights. It
 stores unique page IDs, source URLs, fetch timestamps, and license metadata in
 `data/raw/wikipedia_manifest.jsonl`. Text is stored in
 `data/raw/external_wikipedia.txt`; the seed corpus and collected text are combined into
@@ -253,10 +255,11 @@ and [CC BY-SA 4.0 license](https://creativecommons.org/licenses/by-sa/4.0/) befo
 redistributing collected data or model outputs. The manifest keeps source URLs and license
 information; it is not a substitute for reviewing each source's applicable terms.
 
-Before resuming a checkpoint while the corpus grows, the trainer now reuses the checkpoint's
-existing character vocabulary. Previously unseen characters are mapped to the unknown
-token; this avoids a vocabulary-size mismatch but means the current character-level model
-does not learn new character IDs. SentencePiece BPE is still not integrated into the model.
+Keep the BPE tokenizer artifact at `artifacts/sinhala_english_bpe.model` unchanged while
+resuming `hourly-bpe-model.pt`. The hourly runner uses the BPE tokenizer for both training
+and the separate checkpoint; do not resume the older character-tokenized `hourly-model.pt`
+into this BPE run. The small Transformer still needs substantially more diverse, high-quality
+text and longer training to become a useful question-answering assistant.
 
 Run the hourly loop manually if Task Scheduler registration is blocked by Windows permissions:
 
