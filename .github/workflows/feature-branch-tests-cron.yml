@@ -86,29 +86,6 @@ jobs:
             exit 1
           fi
           echo "Unauthenticated generation correctly rejected."
-      
-      - name: Validate BPE tokenizer artifact
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from src.tokenizer import SentencePieceBPETokenizer
-
-          model = Path("artifacts/sinhala_english_bpe.model")
-          if not model.is_file():
-              raise SystemExit(f"Missing tokenizer model: {model}")
-          tokenizer = SentencePieceBPETokenizer(str(model))
-          for text in ("ආයුබෝවන් ශ්‍රී ලංකාව", "Hello Sri Lanka"):
-              ids = tokenizer.encode(text)
-              if not ids:
-                  raise SystemExit(f"Tokenizer returned no tokens for: {text!r}")
-              print(f"OK: {text!r} -> {len(ids)} tokens")
-          PY
-; then
-            echo "Unauthenticated generation correctly rejected."
-          else
-            echo "Expected unauthenticated generation to return HTTP 401."
-            exit 1
-          fi
 
       - name: Validate BPE tokenizer artifact
         run: |
