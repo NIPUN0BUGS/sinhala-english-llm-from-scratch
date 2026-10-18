@@ -67,6 +67,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument(
+        "--reset-best-validation", action="store_true",
+        help="Compare this run against the resumed model on the current validation split, not the checkpoint historical loss.",
+    )
+    parser.add_argument(
         "--resume", type=Path, default=None,
         help="Resume from a checkpoint created by this project (same tokenizer/model config required).",
     )
@@ -197,6 +201,13 @@ def main() -> None:
         best_val_loss = float(previous.get("best_validation_loss", float("inf")))
         best_epoch = int(previous.get("best_epoch", 0))
         resumed_from = str(args.resume)
+
+    if args.reset_best_validation and previous is not None:
+        # Historical validation losses are not comparable when the corpus/split changes.
+        # Establish a baseline on the current validation split before accepting updates.
+        best_val_loss = evaluate(model, val_loader, criterion, device)
+        best_epoch = 0
+        print(f"Current-split baseline validation loss: {best_val_loss:.4f}")
 
     print(f"Device: {device}; parameters: {sum(p.numel() for p in model.parameters()):,}")
     print(
