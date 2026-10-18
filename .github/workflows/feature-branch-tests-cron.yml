@@ -64,20 +64,29 @@ jobs:
           docker run --detach --rm --name tiny-llm-api-ci -e TINY_LLM_API_KEY=ci-test-key -p 8766:8766 tiny-sinhala-english-llm:ci
           cleanup() { docker stop tiny-llm-api-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
+          healthy=false
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8766/health; then
               echo
+              healthy=true
               break
             fi
             sleep 2
           done
-          echo "Tiny LLM API did not become healthy. Container logs:"
-          docker logs tiny-llm-api-ci
-          exit 1
+          if [ "$healthy" != "true" ]; then
+            echo "Tiny LLM API did not become healthy. Container logs:"
+            docker logs tiny-llm-api-ci
+            exit 1
+          fi
           curl --fail --silent --show-error -X POST http://127.0.0.1:8766/generate -H "Content-Type: application/json" -H "X-API-Key: ci-test-key" -d '{"prompt":"Hi","max_new_tokens":1,"temperature":0.8,"top_k":1}'
           echo
-          if curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8766/generate -H "Content-Type: application/json" -d '{"prompt":"Hi","max_new_tokens":1}' | grep -q '^401
-
+          status=$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8766/generate -H "Content-Type: application/json" -d '{"prompt":"Hi","max_new_tokens":1}')
+          if [ "$status" != "401" ]; then
+            echo "Expected unauthenticated generation to return HTTP 401; got $status"
+            exit 1
+          fi
+          echo "Unauthenticated generation correctly rejected."
+      
       - name: Validate BPE tokenizer artifact
         run: |
           python - <<'PY'
