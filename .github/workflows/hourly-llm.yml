@@ -162,6 +162,7 @@ jobs:
           retention-days: 14
 
       - name: Commit and push corpus and checkpoint
+        id: persist
         if: always()
         shell: bash
         run: |
@@ -170,10 +171,29 @@ jobs:
           git add -f data/raw/wikipedia_manifest.jsonl data/raw/external_wikipedia.txt data/raw/hourly_corpus.txt checkpoints/hourly-bpe-model.pt 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No persistent corpus/checkpoint changes to push."
+            echo "checkpoint_changed=false" >> "$GITHUB_OUTPUT"
           else
+            if git diff --cached --quiet -- checkpoints/hourly-bpe-model.pt; then
+              echo "checkpoint_changed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "checkpoint_changed=true" >> "$GITHUB_OUTPUT"
+            fi
             git commit -m "chore: hourly corpus refresh and training checkpoint"
             git push origin HEAD:feature/tokenizer-cleaning-cpu-benchmark
           fi
+
+      - name: Trigger hosted Tiny LLM redeployment
+        if: steps.persist.outputs.checkpoint_changed == 'true'
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        shell: bash
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::warning::Checkpoint was updated, but RENDER_DEPLOY_HOOK is not configured. Add the Render deploy hook as a repository Actions secret to sync the hosted API automatically."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
+          echo "Render deploy triggered for the newly trained checkpoint."
 
       - name: Fail the run if tests or training failed
         if: always()
