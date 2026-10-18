@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -78,7 +80,7 @@ def generate(model, tokenizer, prompt: str, max_new_tokens: int, temperature: fl
     return all_text[len(decoded_prompt):].strip() or "(The model did not generate new text.)"
 
 
-def make_handler(model, tokenizer):
+def make_handler(model, tokenizer, api_key: str = ""):
     class Handler(BaseHTTPRequestHandler):
         server_version = "TinySinhalaEnglishLLM/0.1"
 
@@ -90,7 +92,7 @@ def make_handler(model, tokenizer):
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Vary", "Origin")
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-                self.send_header("Access-Control-Allow-Headers", "Content-Type")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
                 self.send_header("Access-Control-Allow-Private-Network", "true")
             self.end_headers()
 
@@ -114,8 +116,13 @@ def make_handler(model, tokenizer):
 
         def do_POST(self):
             origin = self.headers.get("Origin")
-            if origin not in ALLOWED_ORIGINS:
-                self._json(403, {"error": "Origin not allowed"})
+            # Browser requests must use an approved origin; server-to-server
+            # requests legitimately have no Origin header.
+            if origin and origin not in ALLOWED_ORIGINS:
+                self._json(403, {"error": "Origin not allowed"}, origin)
+                return
+            if api_key and not hmac.compare_digest(self.headers.get("X-API-Key", ""), api_key):
+                self._json(401, {"error": "Unauthorized"}, origin)
                 return
             if urlparse(self.path).path != "/generate":
                 self._json(404, {"error": "Not found"}, origin)
@@ -157,10 +164,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT_PATH)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8766")))
+    parser.add_argument("--api-key", default=os.getenv("TINY_LLM_API_KEY", ""))
     args = parser.parse_args()
+    if args.host not in {"127.0.0.1", "localhost", "::1"} and not args.api_key:
+        parser.error("TINY_LLM_API_KEY or --api-key is required when binding to a non-loopback host")
     model, tokenizer = load_model(args.checkpoint)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(model, tokenizer))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(model, tokenizer, args.api_key))
     print(f"Tiny LLM API ready at http://{args.host}:{args.port}")
     print("Health check: http://127.0.0.1:%d/health" % args.port)
     try:
