@@ -35,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      IMAGE_PROMPT: \${{ github.event.inputs.image_prompt || 'friendly colorful 2D cartoon scene of a curious little robot exploring a green Sri Lankan garden, clean composition, no text' }}
-      COMMONS_QUERY: \${{ github.event.inputs.commons_query || 'animation cartoon' }}
+      IMAGE_PROMPT: ${{ github.event.inputs.image_prompt || 'friendly colorful 2D cartoon scene of a curious little robot exploring a green Sri Lankan garden, clean composition, no text' }}
+      COMMONS_QUERY: ${{ github.event.inputs.commons_query || 'animation cartoon' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zee-free-media-demo-\${{ github.run_number }}
+          name: zee-free-media-demo-${{ github.run_number }}
           path: media-output/
           if-no-files-found: error
           retention-days: 14
