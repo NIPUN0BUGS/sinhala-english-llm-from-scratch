@@ -10,6 +10,15 @@ class PrepareCorpusTests(unittest.TestCase):
         self.assertEqual(stats["blank"], 1)
         self.assertEqual(stats["duplicates"], 1)
 
+    def test_pairs_adjacent_sinhala_and_english_lines(self) -> None:
+        records, stats = clean_records(
+            "Sinhala: ආයුබෝවන්\nEnglish: Hello\n\nSinhala: ස්තුතියි\nEnglish: Thank you\n"
+        )
+        self.assertEqual(len(records), 2)
+        self.assertIn("Sinhala: ආයුබෝවන්\tEnglish: Hello", records[0])
+        self.assertNotIn("\\t", records[0])
+        self.assertEqual(stats["paired_records"], 2)
+
     def test_split_is_deterministic_and_non_overlapping(self) -> None:
         records = [f"record {index}" for index in range(100)]
         first = split_records(records, seed=7)
