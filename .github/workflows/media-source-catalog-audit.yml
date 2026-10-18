@@ -45,7 +45,7 @@ jobs:
           seen = set()
           for source in sources:
               for key in ("id", "modality", "url", "license_policy", "allowed_for_automatic_download"):
-                  assert source.get(key), f"Missing {key} in source record: {source}"
+                  assert key in source and source[key] is not None and source[key] != "", f"Missing {key} in source record: {source}"
               assert source["id"] not in seen, f"Duplicate source id: {source['id']}"
               seen.add(source["id"])
               assert source["url"].startswith("https://"), source["url"]
