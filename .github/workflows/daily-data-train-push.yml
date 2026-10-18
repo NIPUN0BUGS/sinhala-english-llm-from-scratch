@@ -90,7 +90,8 @@ jobs:
             --max-steps "$MAX_STEPS" \
             --batch-size 8 \
             --context-length 64 \
-            --resume "$CHECKPOINT"
+            --resume "$CHECKPOINT" \
+            --reset-best-validation
 
       - name: Run tests after training
         run: python -m unittest discover -s tests -v
@@ -102,7 +103,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Do not commit raw corpora or processed splits; retain attribution metadata
           # and the model artifact that ZEE consumes.
-          git add data/raw/wikipedia_manifest.jsonl
+          if [ -f data/raw/wikipedia_manifest.jsonl ]; then git add data/raw/wikipedia_manifest.jsonl; fi
           git add -f checkpoints/hourly-bpe-model.pt
           if git diff --cached --quiet; then
             echo "No manifest or checkpoint changes to push."
