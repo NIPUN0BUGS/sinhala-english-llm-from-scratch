@@ -207,6 +207,12 @@ tests/
 5. Compare checkpoints using validation/test loss and the benchmark's exact-match and character-similarity indicators.
 6. Treat the tiny benchmark as a smoke test, not proof of factual correctness or translation quality.
 
+## Automated data growth and training
+
+The GitHub Actions workflow `.github/workflows/daily-data-train-push.yml` runs daily at 02:00 UTC (07:30 Sri Lanka time) and can also be started manually from the Actions tab. It fetches up to five new Sinhala Wikipedia pages and five English Wikipedia pages per run, retains source URLs and license metadata in `data/raw/wikipedia_manifest.jsonl`, rebuilds clean train/validation/test splits, runs the test suite, and trains from `checkpoints/hourly-bpe-model.pt` for up to 200 optimizer steps.
+
+The workflow compares training against the resumed model's baseline loss on the current validation split, then pushes the attribution manifest and checkpoint to `feature/tokenizer-cleaning-cpu-benchmark` only after the tests pass. Raw corpora and processed splits are not committed. Manual runs can override the page count and step limit. This is incremental language-model training, not instruction tuning; lower validation loss does not guarantee factual accuracy or better chat responses. Review workflow logs and evaluate Sinhala/English examples before relying on a checkpoint.
+
 ## Data and responsible use
 
 Use only data you have permission to process and redistribute. Record dataset sources and licenses. Keep secrets, tokens, personal information, local environments, model checkpoints, and large datasets out of Git.
