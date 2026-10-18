@@ -14,4 +14,4 @@ COPY . .
 
 EXPOSE 8766
 
-CMD ["python", "-m", "src.serve", "--checkpoint", "checkpoints/hourly-bpe-model.pt", "--host", "0.0.0.0", "--port", "8766"]
+CMD ["python", "-m", "src.serve", "--checkpoint", "checkpoints/hourly-bpe-model.pt", "--host", "0.0.0.0"]
