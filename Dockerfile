@@ -14,4 +14,5 @@ COPY . .
 
 EXPOSE 8766
 
+# The server reads the hosting platform's PORT environment variable by default.
 CMD ["python", "-m", "src.serve", "--checkpoint", "checkpoints/hourly-bpe-model.pt", "--host", "0.0.0.0"]
