@@ -37,7 +37,43 @@ jobs:
       - name: Refresh Sinhala and English corpus
         id: data
         continue-on-error: true
-        run: python -m src.update_wikipedia_corpus --pages-per-language 3
+        run: python -m src.update_wikipedia_corpus --pages-per-language 5
+
+      - name: Validate free-resource provenance and deduplication
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = Path("data/raw/wikipedia_manifest.jsonl")
+          if not manifest.is_file():
+              raise SystemExit("Missing Wikipedia attribution manifest")
+          seen = set()
+          count = 0
+          with manifest.open(encoding="utf-8") as handle:
+              for line_number, line in enumerate(handle, 1):
+                  if not line.strip():
+                      continue
+                  try:
+                      item = json.loads(line)
+                  except json.JSONDecodeError as exc:
+                      raise SystemExit(f"Invalid JSON at manifest line {line_number}: {exc}")
+                  required = ("page_id", "language", "title", "url", "license", "license_url", "text")
+                  missing = [key for key in required if not item.get(key)]
+                  if missing:
+                      raise SystemExit(f"Missing {missing} at manifest line {line_number}")
+                  if item["page_id"] in seen:
+                      raise SystemExit(f"Duplicate Wikipedia page ID: {item['page_id']}")
+                  if item["language"] not in {"si", "en"}:
+                      raise SystemExit(f"Unexpected language at manifest line {line_number}")
+                  if not item["url"].startswith("https://"):
+                      raise SystemExit(f"Non-HTTPS source URL at manifest line {line_number}")
+                  seen.add(item["page_id"])
+                  count += 1
+          if count == 0:
+              raise SystemExit("No sourced free-resource records are available")
+          print(f"Validated {count} unique Wikipedia records with source and license metadata.")
+          PY
 
       - name: Prepare current dataset splits
         id: prepare
