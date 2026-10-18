@@ -187,8 +187,8 @@ def main() -> None:
                 "Checkpoint vocabulary differs from the current corpus tokenizer. "
                 "Resume with the original corpus/tokenizer, or start a fresh run."
             )
-        if args.tokenizer == "bpe" and previous.get("tokenizer_model") != str(args.tokenizer_model):
-            raise ValueError("Checkpoint BPE model path differs from --tokenizer-model.")
+        if args.tokenizer == "bpe" and Path(str(previous.get("tokenizer_model", ""))).name != args.tokenizer_model.name:
+            raise ValueError("Checkpoint BPE tokenizer filename differs from --tokenizer-model. Use the matching tokenizer artifact.")
         model.load_state_dict(previous["model_state_dict"])
         if "optimizer_state_dict" in previous:
             optimizer.load_state_dict(previous["optimizer_state_dict"])
