@@ -1,6 +1,13 @@
 name: Scheduled feature branch tests
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/feature-branch-tests-cron.yml"
+      - "src/**"
+      - "tests/**"
+      - "Dockerfile"
   schedule:
     # Run every 6 hours (UTC); GitHub scheduled workflows run from the default branch.
     - cron: "23 */6 * * *"
