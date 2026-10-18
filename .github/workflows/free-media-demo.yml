@@ -1,6 +1,13 @@
 name: Free image and video demo pipeline
 
 on:
+  push:
+    branches:
+      - feature/tokenizer-cleaning-cpu-benchmark
+    paths:
+      - "scripts/free_media_pipeline.py"
+      - ".github/workflows/free-media-demo.yml"
+      - "docs/free-media-demo-ci.md"
   schedule:
     # Daily at 08:00 Sri Lanka time (02:30 UTC).
     - cron: "30 2 * * *"
