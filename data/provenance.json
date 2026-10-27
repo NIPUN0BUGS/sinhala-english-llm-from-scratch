@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "datasets": {
+    "data/raw/train.txt": {
+      "source_url": "REQUIRED: identify the original source or state that the sample was authored locally",
+      "license": "REQUIRED: verify the licence before redistribution or training",
+      "version": "starter-smoke-test-v1",
+      "notes": "Tiny demonstration corpus. Do not treat as a quality training dataset; verify source and licence."
+    }
+  }
+}
