@@ -1,6 +1,7 @@
 """Minimal training entry point for the starter model."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import torch
@@ -9,11 +10,13 @@ from torch.utils.data import DataLoader
 
 from src.dataset import NextTokenDataset
 from src.model import TinyLanguageModel
+from src.safe_checkpoint import save_safetensors
 from src.tokenizer import CharacterTokenizer
 
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS_PATH = ROOT / "data" / "raw" / "train.txt"
-CHECKPOINT_PATH = ROOT / "checkpoints" / "tiny_model.pt"
+CHECKPOINT_PATH = ROOT / "checkpoints" / "tiny_model.safetensors"
+METADATA_PATH = ROOT / "checkpoints" / "tiny_model.metadata.json"
 
 
 def main() -> None:
@@ -47,18 +50,23 @@ def main() -> None:
         mean_loss = total_loss / max(1, batches)
         print(f"Epoch {epoch + 1:02d}/{epochs} - loss: {mean_loss:.4f}")
 
-    CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "vocab_size": tokenizer.vocab_size,
-            "embedding_dim": 128,
-            "context_length": context_length,
-            "vocabulary": tokenizer._id_to_char,
-        },
-        CHECKPOINT_PATH,
+    save_safetensors(model.state_dict(), CHECKPOINT_PATH)
+    metadata = {
+        "format": "safetensors",
+        "model_type": "TinyLanguageModel",
+        "vocab_size": tokenizer.vocab_size,
+        "embedding_dim": 128,
+        "context_length": context_length,
+        "vocabulary": tokenizer._id_to_char,
+        "dataset_path": str(CORPUS_PATH.relative_to(ROOT)),
+    }
+    METADATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    METADATA_PATH.write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
     )
-    print(f"Saved starter checkpoint to {CHECKPOINT_PATH}")
+    print(f"Saved safe checkpoint to {CHECKPOINT_PATH}")
+    print(f"Saved tokenizer/model metadata to {METADATA_PATH}")
 
 
 if __name__ == "__main__":
