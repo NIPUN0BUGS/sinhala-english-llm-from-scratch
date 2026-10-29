@@ -1,8 +1,0 @@
-{"id":"translation_si_en_01","task":"translation","prompt":"Sinhala: ආයුබෝවන්.\nEnglish:","reference":"Hello."}
-{"id":"translation_en_si_01","task":"translation","prompt":"English: Thank you.\nSinhala:","reference":"ස්තුතියි."}
-{"id":"translation_si_en_02","task":"translation","prompt":"Sinhala: ඔබට කොහොමද?\nEnglish:","reference":"How are you?"}
-{"id":"translation_en_si_02","task":"translation","prompt":"English: Good morning.\nSinhala:","reference":"සුභ උදෑසනක්."}
-{"id":"qa_en_01","task":"question_answering","prompt":"Question: What is the capital of Sri Lanka?\nAnswer:","reference":"Sri Jayawardenepura Kotte."}
-{"id":"qa_en_02","task":"question_answering","prompt":"Question: What is the largest ocean on Earth?\nAnswer:","reference":"The Pacific Ocean."}
-{"id":"qa_si_01","task":"question_answering","prompt":"ප්‍රශ්නය: ශ්‍රී ලංකාවේ ජාතික භාෂා දෙක මොනවාද?\nපිළිතුර:","reference":"සිංහල සහ දෙමළ."}
-{"id":"qa_si_02","task":"question_answering","prompt":"ප්‍රශ්නය: සතියක දින ගණන කීයද?\nපිළිතුර:","reference":"දින හතකි."}
