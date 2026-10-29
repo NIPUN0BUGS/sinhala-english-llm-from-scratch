@@ -1,4 +1,7 @@
-"""Train a small Sinhala-English causal Transformer locally."""
+"""Train a small Sinhala-English causal Transformer locally.
+
+Conflict resolution: retain the Transformer/BPE training entry point over the starter trainer.
+"""
 from __future__ import annotations
 
 import argparse
