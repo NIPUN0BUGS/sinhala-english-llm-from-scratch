@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: zee-tiny-llm
+    runtime: docker
+    plan: free
+    branch: feature/tokenizer-cleaning-cpu-benchmark
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: false
+    healthCheckPath: /health
+    envVars:
+      - key: TINY_LLM_API_KEY
+        sync: false

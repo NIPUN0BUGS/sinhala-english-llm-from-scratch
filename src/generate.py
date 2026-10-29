@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from src.model import TinyLanguageModel
-from src.tokenizer import CharacterTokenizer
+from src.tokenizer import CharacterTokenizer, SentencePieceBPETokenizer
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CHECKPOINT_PATH = ROOT / "checkpoints" / "tiny_transformer.pt"
@@ -45,10 +45,14 @@ def main() -> None:
     except TypeError:  # Compatibility with older PyTorch releases.
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
 
-    tokenizer = CharacterTokenizer.from_vocabulary(
-        checkpoint["vocabulary"],
-        unknown_token=checkpoint.get("unknown_token", "�"),
-    )
+    tokenizer_type = checkpoint.get("tokenizer_type", "character")
+    if tokenizer_type == "bpe":
+        tokenizer = SentencePieceBPETokenizer(checkpoint["tokenizer_model"])
+    else:
+        tokenizer = CharacterTokenizer.from_vocabulary(
+            checkpoint["vocabulary"],
+            unknown_token=checkpoint.get("unknown_token", "�"),
+        )
     model = TinyLanguageModel(**checkpoint["model_config"])
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()

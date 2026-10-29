@@ -64,3 +64,43 @@ class CharacterTokenizer:
                 raise ValueError(f"Token ID out of range: {token_id}")
             chars.append(self._id_to_char[token_id])
         return "".join(chars)
+
+
+
+class SentencePieceBPETokenizer:
+    """Thin adapter around a locally trained SentencePiece BPE model."""
+
+    def __init__(self, model_path: str | None = None) -> None:
+        try:
+            import sentencepiece as spm
+        except ImportError as exc:
+            raise RuntimeError(
+                "BPE tokenizer requires SentencePiece. Install it with: "
+                "python -m pip install sentencepiece"
+            ) from exc
+        if not model_path:
+            raise ValueError("A SentencePiece .model path is required.")
+        from pathlib import Path
+
+        self.model_path = str(Path(model_path))
+        if not Path(self.model_path).is_file():
+            raise FileNotFoundError(f"SentencePiece model not found: {self.model_path}")
+        self._processor = spm.SentencePieceProcessor(model_file=self.model_path)
+
+    @property
+    def vocab_size(self) -> int:
+        return int(self._processor.get_piece_size())
+
+    @property
+    def vocabulary(self) -> list[str]:
+        return [self._processor.id_to_piece(i) for i in range(self.vocab_size)]
+
+    @property
+    def unknown_token(self) -> str:
+        return self._processor.id_to_piece(self._processor.unk_id())
+
+    def encode(self, text: str) -> list[int]:
+        return list(self._processor.encode(text, out_type=int))
+
+    def decode(self, token_ids: list[int]) -> str:
+        return str(self._processor.decode([int(token_id) for token_id in token_ids]))
