@@ -1,7 +1,13 @@
-"""Train a small Sinhala-English causal Transformer locally."""
+"""CPU-friendly training entry point for the Sinhala-English language model.
+
+This trainer keeps the repository's Safetensors-only checkpoint policy.  It
+supports the current model implementation and records enough metadata to
+reconstruct its character vocabulary safely.
+"""
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import time
 from pathlib import Path
@@ -12,11 +18,13 @@ from torch.utils.data import DataLoader
 
 from src.dataset import NextTokenDataset
 from src.model import TinyLanguageModel
-from src.tokenizer import CharacterTokenizer, SentencePieceBPETokenizer
+from src.safe_checkpoint import save_safetensors
+from src.tokenizer import CharacterTokenizer
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CORPUS_PATH = ROOT / "data" / "raw" / "train.txt"
-DEFAULT_CHECKPOINT_PATH = ROOT / "checkpoints" / "tiny_transformer.pt"
+DEFAULT_CHECKPOINT_PATH = ROOT / "checkpoints" / "tiny_model.safetensors"
+DEFAULT_METADATA_PATH = ROOT / "checkpoints" / "tiny_model.metadata.json"
 
 
 def evaluate(
@@ -25,6 +33,7 @@ def evaluate(
     criterion: nn.Module,
     device: torch.device,
 ) -> float:
+    """Return mean next-token loss without updating model parameters."""
     model.eval()
     total_loss = 0.0
     batches = 0
@@ -39,27 +48,16 @@ def evaluate(
     return total_loss / max(1, batches)
 
 
-def read_ids(path: Path, tokenizer) -> list[int]:
-    if not path.is_file():
-        raise FileNotFoundError(f"Corpus file not found: {path}")
-    text = path.read_text(encoding="utf-8")
-    if not text.strip():
-        raise ValueError(f"Corpus file is empty: {path}")
-    return tokenizer.encode(text)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--corpus", type=Path, default=DEFAULT_CORPUS_PATH,
-        help="Legacy single-file mode; splits the file sequentially into train/validation.",
+        "--corpus",
+        type=Path,
+        default=DEFAULT_CORPUS_PATH,
+        help="UTF-8 corpus file; the final 10%% is used for validation.",
     )
-    parser.add_argument("--train-corpus", type=Path, default=None)
-    parser.add_argument("--validation-corpus", type=Path, default=None)
-    parser.add_argument("--test-corpus", type=Path, default=None)
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT_PATH)
-    parser.add_argument("--tokenizer", choices=("character", "bpe"), default="character")
-    parser.add_argument("--tokenizer-model", type=Path, default=ROOT / "artifacts" / "sinhala_english_bpe.model")
+    parser.add_argument("--metadata", type=Path, default=DEFAULT_METADATA_PATH)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--context-length", type=int, default=64)
@@ -67,170 +65,101 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument(
-        "--reset-best-validation", action="store_true",
-        help="Compare this run against the resumed model on the current validation split, not the checkpoint historical loss.",
-    )
-    parser.add_argument(
-        "--resume", type=Path, default=None,
-        help="Resume from a checkpoint created by this project (same tokenizer/model config required).",
+        "--embedding-dim",
+        type=int,
+        default=128,
+        help="Must match the current TinyLanguageModel implementation.",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.epochs < 1 or args.batch_size < 1 or args.context_length < 4:
-        raise ValueError("epochs/batch-size must be positive and context-length must be at least 4")
+    if args.epochs < 1 or args.batch_size < 1 or args.context_length < 1:
+        raise ValueError("epochs, batch-size, and context-length must be positive")
+    if args.embedding_dim < 1:
+        raise ValueError("--embedding-dim must be positive")
     if args.max_steps is not None and args.max_steps < 1:
         raise ValueError("--max-steps must be positive when provided")
+    if not args.corpus.is_file():
+        raise FileNotFoundError(f"Training corpus not found: {args.corpus}")
 
-    split_paths = (args.train_corpus, args.validation_corpus, args.test_corpus)
-    if any(path is not None for path in split_paths) and not all(
-        path is not None for path in split_paths
-    ):
-        raise ValueError("Provide all three: --train-corpus, --validation-corpus, --test-corpus")
-    explicit_splits = all(path is not None for path in split_paths)
+    text = args.corpus.read_text(encoding="utf-8")
+    if not text.strip():
+        raise ValueError(f"Training corpus is empty: {args.corpus}")
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.set_num_threads(max(1, min(4, torch.get_num_threads())))
     device = torch.device("cpu")
 
-    previous = None
-    if args.resume is not None:
-        if not args.resume.is_file():
-            raise FileNotFoundError(f"Resume checkpoint not found: {args.resume}")
-        try:
-            previous = torch.load(args.resume, map_location=device, weights_only=True)
-        except TypeError:
-            previous = torch.load(args.resume, map_location=device)
-        if "model_state_dict" not in previous or "model_config" not in previous:
-            raise ValueError("Resume checkpoint is missing model_state_dict/model_config.")
+    tokenizer = CharacterTokenizer().fit(text)
+    token_ids = tokenizer.encode(text)
+    if len(token_ids) < 40:
+        raise ValueError("Corpus is too short for a train/validation split.")
 
-    if previous is not None and previous.get("tokenizer_type", "character") != args.tokenizer:
-        raise ValueError("Checkpoint tokenizer type differs from --tokenizer. Use a separate checkpoint for each tokenizer.")
-
-    def make_tokenizer(training_text: str):
-        if args.tokenizer == "bpe":
-            return SentencePieceBPETokenizer(str(args.tokenizer_model))
-        if previous is not None and previous.get("vocabulary"):
-            return CharacterTokenizer.from_vocabulary(previous["vocabulary"], previous.get("unknown_token", "�"))
-        return CharacterTokenizer().fit(training_text)
-
-    if explicit_splits:
-        assert args.train_corpus and args.validation_corpus and args.test_corpus
-        train_text = args.train_corpus.read_text(encoding="utf-8")
-        if not train_text.strip():
-            raise ValueError(f"Training corpus is empty: {args.train_corpus}")
-        tokenizer = make_tokenizer(train_text)
-        train_ids = tokenizer.encode(train_text)
-        val_ids = read_ids(args.validation_corpus, tokenizer)
-        test_ids = read_ids(args.test_corpus, tokenizer)
-        corpus_paths = {
-            "train": str(args.train_corpus),
-            "validation": str(args.validation_corpus),
-            "test": str(args.test_corpus),
-        }
-    else:
-        if not args.corpus.is_file():
-            raise FileNotFoundError(f"Training corpus not found: {args.corpus}")
-        text = args.corpus.read_text(encoding="utf-8")
-        tokenizer = make_tokenizer(text)
-        token_ids = tokenizer.encode(text)
-        if len(token_ids) < 40:
-            raise ValueError("Corpus is too short for a train/validation split.")
-        split_at = int(len(token_ids) * 0.9)
-        train_ids, val_ids = token_ids[:split_at], token_ids[split_at:]
-        test_ids = []
-        corpus_paths = {"train": str(args.corpus), "validation": "sequential 10% split"}
-
-    context_length = min(args.context_length, max(4, len(train_ids) // 10))
-    if len(train_ids) <= context_length or len(val_ids) <= context_length:
-        raise ValueError("Not enough tokens for the selected context length and data splits.")
-    if test_ids and len(test_ids) <= context_length:
-        raise ValueError("Test corpus must contain more tokens than the context length.")
+    split_at = int(len(token_ids) * 0.9)
+    train_ids, validation_ids = token_ids[:split_at], token_ids[split_at:]
+    context_length = min(args.context_length, max(1, len(train_ids) // 10))
+    if len(train_ids) <= context_length or len(validation_ids) <= context_length:
+        raise ValueError("Not enough tokens for the selected context length and split.")
 
     train_data = NextTokenDataset(train_ids, context_length=context_length)
-    val_data = NextTokenDataset(val_ids, context_length=context_length)
+    validation_data = NextTokenDataset(validation_ids, context_length=context_length)
     train_loader = DataLoader(
-        train_data, batch_size=min(args.batch_size, len(train_data)), shuffle=True
+        train_data,
+        batch_size=min(args.batch_size, len(train_data)),
+        shuffle=True,
     )
-    val_loader = DataLoader(
-        val_data, batch_size=min(args.batch_size, len(val_data)), shuffle=False
+    validation_loader = DataLoader(
+        validation_data,
+        batch_size=min(args.batch_size, len(validation_data)),
+        shuffle=False,
     )
-    test_loader = None
-    if test_ids:
-        test_data = NextTokenDataset(test_ids, context_length=context_length)
-        test_loader = DataLoader(
-            test_data, batch_size=min(args.batch_size, len(test_data)), shuffle=False
-        )
 
-    config = {
-        "vocab_size": tokenizer.vocab_size,
-        "embedding_dim": 96,
-        "num_heads": 4,
-        "num_layers": 2,
-        "max_seq_len": context_length,
-        "dropout": 0.1,
-    }
-    model = TinyLanguageModel(**config).to(device)
+    model = TinyLanguageModel(
+        vocab_size=tokenizer.vocab_size,
+        embedding_dim=args.embedding_dim,
+    ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
-    criterion = nn.CrossEntropyLoss()
-    resumed_from = None
-    best_val_loss = float("inf")
-    best_epoch = 0
-    if previous is not None:
-        if previous["model_config"] != config:
-            raise ValueError(
-                "Checkpoint model configuration does not match this run. "
-                "Use the same context length and model settings."
-            )
-        if args.tokenizer == "character" and previous.get("vocabulary") != tokenizer.vocabulary:
-            raise ValueError(
-                "Checkpoint vocabulary differs from the current corpus tokenizer. "
-                "Resume with the original corpus/tokenizer, or start a fresh run."
-            )
-        if args.tokenizer == "bpe" and Path(str(previous.get("tokenizer_model", ""))).name != args.tokenizer_model.name:
-            raise ValueError("Checkpoint BPE tokenizer filename differs from --tokenizer-model. Use the matching tokenizer artifact.")
-        model.load_state_dict(previous["model_state_dict"])
-        if "optimizer_state_dict" in previous:
-            optimizer.load_state_dict(previous["optimizer_state_dict"])
-        if previous.get("scheduler_state_dict") is not None:
-            scheduler.load_state_dict(previous["scheduler_state_dict"])
-        best_val_loss = float(previous.get("best_validation_loss", float("inf")))
-        best_epoch = int(previous.get("best_epoch", 0))
-        resumed_from = str(args.resume)
-
-    if args.reset_best_validation and previous is not None:
-        # Historical validation losses are not comparable when the corpus/split changes.
-        # Establish a baseline on the current validation split before accepting updates.
-        best_val_loss = evaluate(model, val_loader, criterion, device)
-        best_epoch = 0
-        print(f"Current-split baseline validation loss: {best_val_loss:.4f}")
-
-    print(f"Device: {device}; parameters: {sum(p.numel() for p in model.parameters()):,}")
-    print(
-        f"Train tokens: {len(train_ids):,}; validation tokens: {len(val_ids):,}; "
-        f"test tokens: {len(test_ids):,}; vocabulary: {tokenizer.vocab_size}"
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=2
     )
+    criterion = nn.CrossEntropyLoss()
 
-    started_at = time.perf_counter()
+    best_validation_loss = float("inf")
+    best_epoch = 0
     global_step = 0
+    started_at = time.perf_counter()
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    args.metadata.parent.mkdir(parents=True, exist_ok=True)
+
+    print(
+        f"Device: {device}; parameters: "
+        f"{sum(parameter.numel() for parameter in model.parameters()):,}"
+    )
+    print(
+        f"Train tokens: {len(train_ids):,}; validation tokens: "
+        f"{len(validation_ids):,}; vocabulary: {tokenizer.vocab_size}"
+    )
 
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
         batches = 0
+
         for inputs, targets in train_loader:
             inputs, targets = inputs.to(device), targets.to(device)
             optimizer.zero_grad(set_to_none=True)
             logits = model(inputs)
-            loss = criterion(logits.reshape(-1, model.vocab_size), targets.reshape(-1))
+            loss = criterion(
+                logits.reshape(-1, model.vocab_size),
+                targets.reshape(-1),
+            )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+
             total_loss += float(loss.detach())
             batches += 1
             global_step += 1
@@ -238,57 +167,61 @@ def main() -> None:
                 break
 
         train_loss = total_loss / max(1, batches)
-        val_loss = evaluate(model, val_loader, criterion, device)
-        scheduler.step(val_loss)
-        improved = val_loss < best_val_loss
-        print(
-            f"Epoch {epoch + 1:03d}/{args.epochs} | train loss {train_loss:.4f} | "
-            f"val loss {val_loss:.4f}" + (" | new best" if improved else "")
+        validation_loss = evaluate(
+            model, validation_loader, criterion, device
         )
+        scheduler.step(validation_loss)
+        improved = validation_loss < best_validation_loss
+
+        print(
+            f"Epoch {epoch + 1:03d}/{args.epochs} | "
+            f"train loss {train_loss:.4f} | "
+            f"validation loss {validation_loss:.4f}"
+            + (" | new best" if improved else "")
+        )
+
         if improved:
-            best_val_loss = val_loss
+            best_validation_loss = validation_loss
             best_epoch = epoch + 1
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "scheduler_state_dict": scheduler.state_dict(),
-                    "model_config": config,
-                    "tokenizer_type": args.tokenizer,
-                    "tokenizer_model": str(args.tokenizer_model) if args.tokenizer == "bpe" else None,
-                    "vocabulary": tokenizer.vocabulary if args.tokenizer == "character" else None,
-                    "unknown_token": tokenizer.unknown_token if args.tokenizer == "character" else None,
-                    "context_length": context_length,
-                    "best_validation_loss": best_val_loss,
-                    "best_epoch": best_epoch,
-                    "training": {
-                        "epochs_requested": args.epochs,
-                        "resumed_from": resumed_from,
-                        "optimizer_steps": global_step,
-                        "seed": args.seed,
-                        "corpus_paths": corpus_paths,
-                        "train_tokens": len(train_ids),
-                        "validation_tokens": len(val_ids),
-                        "test_tokens": len(test_ids),
-                    },
+            save_safetensors(model.state_dict(), args.checkpoint)
+            metadata = {
+                "format": "safetensors",
+                "model_type": "TinyLanguageModel",
+                "vocab_size": tokenizer.vocab_size,
+                "embedding_dim": args.embedding_dim,
+                "context_length": context_length,
+                "vocabulary": tokenizer._id_to_char,
+                "unknown_token": tokenizer.unknown_token,
+                "best_validation_loss": best_validation_loss,
+                "best_epoch": best_epoch,
+                "training": {
+                    "epochs_requested": args.epochs,
+                    "optimizer_steps": global_step,
+                    "seed": args.seed,
+                    "corpus_path": str(args.corpus),
+                    "train_tokens": len(train_ids),
+                    "validation_tokens": len(validation_ids),
                 },
-                args.checkpoint,
+            }
+            args.metadata.write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
             )
+
         if args.max_steps is not None and global_step >= args.max_steps:
             break
 
     print(
         f"Optimizer steps: {global_step}; best epoch: {best_epoch}; "
-        f"best validation loss: {best_val_loss:.4f}; "
+        f"best validation loss: {best_validation_loss:.4f}; "
         f"elapsed seconds: {time.perf_counter() - started_at:.2f}"
     )
-    if test_loader is not None:
-        checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        test_loss = evaluate(model, test_loader, criterion, device)
-        print(f"Held-out test loss (best checkpoint): {test_loss:.4f}")
-    print(f"Saved best-validation checkpoint: {args.checkpoint}")
-    print(f"Tokenizer: {args.tokenizer}; a small model and limited corpus are not enough for general-purpose chat.")
+    print(f"Saved safe checkpoint: {args.checkpoint}")
+    print(f"Saved tokenizer/model metadata: {args.metadata}")
+    print(
+        "Note: this checkpoint uses the repository's current feed-forward "
+        "baseline; it is not a causal Transformer or a general-purpose chatbot."
+    )
 
 
 if __name__ == "__main__":
