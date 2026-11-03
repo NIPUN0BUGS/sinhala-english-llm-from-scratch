@@ -1,0 +1,222 @@
+name: Automation / Scheduled Model Training
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hourly-llm-training
+  cancel-in-progress: false
+
+jobs:
+  refresh-and-train:
+    name: Refresh Data, Train, and Evaluate
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout the active LLM branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/tokenizer-cleaning-cpu-benchmark
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install training dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch sentencepiece pytest numpy
+          python -m pip check
+          python - <<'PY'
+          import numpy, pytest, sentencepiece, torch
+          print(f"Training dependencies ready: torch={torch.__version__}, numpy={numpy.__version__}, sentencepiece={sentencepiece.__version__}, pytest={pytest.__version__}")
+          PY
+
+      - name: Refresh Sinhala and English corpus
+        id: data
+        continue-on-error: true
+        run: python -m src.update_wikipedia_corpus --pages-per-language 5
+
+      - name: Validate free-resource provenance and deduplication
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = Path("data/raw/wikipedia_manifest.jsonl")
+          if not manifest.is_file():
+              raise SystemExit("Missing Wikipedia attribution manifest")
+          seen = set()
+          count = 0
+          with manifest.open(encoding="utf-8") as handle:
+              for line_number, line in enumerate(handle, 1):
+                  if not line.strip():
+                      continue
+                  try:
+                      item = json.loads(line)
+                  except json.JSONDecodeError as exc:
+                      raise SystemExit(f"Invalid JSON at manifest line {line_number}: {exc}")
+                  required = ("page_id", "language", "title", "url", "license", "license_url", "text")
+                  missing = [key for key in required if not item.get(key)]
+                  if missing:
+                      raise SystemExit(f"Missing {missing} at manifest line {line_number}")
+                  if item["page_id"] in seen:
+                      raise SystemExit(f"Duplicate Wikipedia page ID: {item['page_id']}")
+                  if item["language"] not in {"si", "en"}:
+                      raise SystemExit(f"Unexpected language at manifest line {line_number}")
+                  if not item["url"].startswith("https://"):
+                      raise SystemExit(f"Non-HTTPS source URL at manifest line {line_number}")
+                  seen.add(item["page_id"])
+                  count += 1
+          if count == 0:
+              raise SystemExit("No sourced free-resource records are available")
+          print(f"Validated {count} unique Wikipedia records with source and license metadata.")
+          PY
+
+      - name: Prepare current dataset splits
+        id: prepare
+        continue-on-error: true
+        run: |
+          python -m src.prepare_corpus \
+            --input data/raw/hourly_corpus.txt \
+            --output-dir data/processed \
+            --seed 42
+
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        run: python -m unittest discover -s tests -v
+
+      - name: Train three epochs if preparation and tests pass
+        id: train
+        if: steps.prepare.outcome == 'success' && steps.tests.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p checkpoints
+          ARGS=(
+            -m src.train
+            --train-corpus data/processed/train.txt
+            --validation-corpus data/processed/validation.txt
+            --test-corpus data/processed/test.txt
+            --checkpoint checkpoints/hourly-bpe-model.pt
+            --tokenizer bpe
+            --tokenizer-model artifacts/sinhala_english_bpe.model
+            --epochs 3
+            --batch-size 8
+            --context-length 64
+          )
+          if [ -f checkpoints/hourly-bpe-model.pt ]; then
+            ARGS+=(--resume checkpoints/hourly-bpe-model.pt)
+          fi
+          set -o pipefail
+          python "${ARGS[@]}" 2>&1 | tee training.log
+
+      - name: Evaluate Sinhala and English sample generation
+        id: generation
+        if: steps.train.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            echo "=== Sinhala prompt ==="
+            python -m src.generate --checkpoint checkpoints/hourly-bpe-model.pt --prompt "ආයුබෝවන්. ශ්‍රී ලංකාව ගැන" --max-new-tokens 40 --seed 42
+            echo
+            echo "=== English prompt ==="
+            python -m src.generate --checkpoint checkpoints/hourly-bpe-model.pt --prompt "Hello. Tell me about Sri Lanka" --max-new-tokens 40 --seed 43
+          } 2>&1 | tee generation.log
+
+      - name: Score bilingual translation and QA benchmark
+        id: evaluation
+        if: steps.train.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m src.evaluate_bilingual --checkpoint checkpoints/hourly-bpe-model.pt --output evaluation-results/run-${{ github.run_id }}.json 2>&1 | tee evaluation.log
+
+      - name: Save logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hourly-llm-logs-${{ github.run_id }}
+          path: |
+            data/raw/wikipedia_manifest.jsonl
+            data/raw/external_wikipedia.txt
+            data/raw/hourly_corpus.txt
+            data/processed/
+            checkpoints/hourly-bpe-model.pt
+            training.log
+            generation.log
+            evaluation.log
+            evaluation-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Commit and push corpus and checkpoint
+        id: persist
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f data/raw/wikipedia_manifest.jsonl data/raw/external_wikipedia.txt data/raw/hourly_corpus.txt checkpoints/hourly-bpe-model.pt 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "No persistent corpus/checkpoint changes to push."
+            echo "checkpoint_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            if git diff --cached --quiet -- checkpoints/hourly-bpe-model.pt; then
+              echo "checkpoint_changed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "checkpoint_changed=true" >> "$GITHUB_OUTPUT"
+            fi
+            git commit -m "chore: hourly corpus refresh and training checkpoint"
+            git push origin HEAD:feature/tokenizer-cleaning-cpu-benchmark
+          fi
+
+      - name: Trigger hosted Tiny LLM redeployment
+        if: steps.persist.outputs.checkpoint_changed == 'true'
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        shell: bash
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "::warning::Checkpoint was updated, but RENDER_DEPLOY_HOOK is not configured. Add the Render deploy hook as a repository Actions secret to sync the hosted API automatically."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"
+          echo "Render deploy triggered for the newly trained checkpoint."
+
+      - name: Fail the run if tests or training failed
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.prepare.outcome }}" != "success" ]; then
+            echo "Corpus preparation failed."
+            exit 1
+          fi
+          if [ "${{ steps.tests.outcome }}" != "success" ]; then
+            echo "Tests failed. Logs are available as workflow artifacts; automatic arbitrary code repair is not configured."
+            exit 1
+          fi
+          if [ "${{ steps.train.outcome }}" != "success" ]; then
+            echo "Training failed. Logs are available as workflow artifacts."
+            exit 1
+          fi
+          if [ "${{ steps.generation.outcome }}" != "success" ]; then
+            echo "Generation evaluation failed. Logs are available as workflow artifacts."
+            exit 1
+          fi
+          if [ "${{ steps.evaluation.outcome }}" != "success" ]; then
+            echo "Bilingual benchmark evaluation failed. Logs are available as workflow artifacts."
+            exit 1
+          fi
