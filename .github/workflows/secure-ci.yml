@@ -28,6 +28,9 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
+          # Gitleaks compares the PR commit with its base/parent. Fetch full
+          # history so every revision in that range exists in the local clone.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python
