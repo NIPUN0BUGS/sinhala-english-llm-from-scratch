@@ -4,6 +4,7 @@ from pathlib import Path
 
 import torch
 
+from src.model import CausalTransformerLanguageModel
 from src.provenance import sha256_file
 from src.safe_checkpoint import load_safetensors, save_safetensors
 from src.tokenizer import CharacterTokenizer
@@ -25,6 +26,30 @@ class SecurityAndQualityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_safetensors(Path(directory) / "checkpoint.pt")
 
+    def test_safe_checkpoint_supports_tied_model_weights(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "tied-model.safetensors"
+            model = CausalTransformerLanguageModel(
+                vocab_size=16, embedding_dim=16, n_heads=4, n_layers=1,
+                max_seq_len=8, dropout=0.0,
+            )
+            self.assertEqual(
+                model.token_embedding.weight.data_ptr(),
+                model.lm_head.weight.data_ptr(),
+            )
+            save_safetensors(model.state_dict(), path)
+            restored = CausalTransformerLanguageModel(
+                vocab_size=16, embedding_dim=16, n_heads=4, n_layers=1,
+                max_seq_len=8, dropout=0.0,
+            )
+            restored.load_state_dict(load_safetensors(path))
+            self.assertTrue(torch.equal(
+                model.token_embedding.weight, restored.token_embedding.weight
+            ))
+            self.assertTrue(torch.equal(
+                model.lm_head.weight, restored.lm_head.weight
+            ))
+
     def test_dataset_hash_is_stable(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "dataset.txt"
@@ -33,7 +58,6 @@ class SecurityAndQualityTests(unittest.TestCase):
             self.assertEqual(len(sha256_file(path)), 64)
 
     def test_cpu_memory_smoke_budget(self):
-        # Avoid platform-specific RSS assertions; ensure a tiny forward pass is bounded by tensor shape.
         model = torch.nn.Embedding(128, 16)
         tokens = torch.zeros((2, 32), dtype=torch.long)
         output = model(tokens)
