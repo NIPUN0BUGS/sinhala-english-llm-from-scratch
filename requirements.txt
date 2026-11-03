@@ -1,5 +1,4 @@
-# Python 3.12; CPU-compatible baseline dependencies.
-# Review and update these pins deliberately with CI passing.
+# Python 3.12; CPU-first training and safe checkpoint support.
 numpy==2.2.6
-torch==2.7.1
+torch==2.15.0
 safetensors==0.6.2

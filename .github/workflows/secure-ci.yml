@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test-and-scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,16 +25,26 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install pinned dependencies
+      - name: Install CPU-only PyTorch and project dependencies
         run: |
           python -m pip install --disable-pip-version-check --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
           python -m pip install -r requirements.txt
           python -m pip install pip-audit==2.9.0
           python -m pip check
+          python -c "import torch; print('torch', torch.__version__, 'cuda_available=', torch.cuda.is_available()); assert not torch.cuda.is_available()"
       - name: Audit Python dependencies
         run: python -m pip_audit -r requirements.txt
-      - name: Run tests
+      - name: Run unit tests
         run: python -m unittest discover -s tests -v
+      - name: Run CPU training smoke test
+        run: |
+          python -m src.train --corpus data/raw/train.txt --checkpoint /tmp/ci-model.safetensors --metadata /tmp/ci-model.metadata.json --epochs 1 --max-steps 2 --batch-size 4 --context-length 16 --embedding-dim 32 --heads 4 --layers 1 --dropout 0 --threads 2
+          test -s /tmp/ci-model.safetensors
+          test -s /tmp/ci-model.metadata.json
+      - name: Run bilingual generation smoke test
+        run: |
+          python -m src.generate --checkpoint /tmp/ci-model.safetensors --metadata /tmp/ci-model.metadata.json --prompt "Hello ආයුබෝවන්" --max-new-tokens 8 --seed 42
       - name: Verify dataset provenance and hashes
         run: python -m src.provenance --dataset data/raw/train.txt --manifest data/provenance.json
       - name: Check for accidentally committed secrets
