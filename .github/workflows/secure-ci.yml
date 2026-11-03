@@ -1,61 +1,126 @@
-name: Secure LLM CI
+name: Sinhala-English LLM Complete CI
 
 on:
   push:
-    branches: [main, "security/**", "feature/**", "bugfix/**"]
+    branches: [main, "feature/**", "bugfix/**", "security/**", "ci/**"]
   pull_request:
+    branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "30 3 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: secure-llm-ci-${{ github.ref }}
+  group: complete-llm-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test-and-scan:
+  complete-validation:
+    name: Complete LLM validation (required)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    env:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install CPU-only PyTorch and project dependencies
+
+      - name: Install CPU-only dependencies
         run: |
-          python -m pip install --disable-pip-version-check --upgrade pip
+          mkdir -p ci-logs
+          python -m pip install --upgrade pip
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
           python -m pip install -r requirements.txt
           python -m pip install pip-audit==2.9.0
           python -m pip check
-          python -c "import torch; print('torch', torch.__version__, 'cuda_available=', torch.cuda.is_available()); assert not torch.cuda.is_available()"
-      - name: Audit Python dependencies
-        run: python -m pip_audit -r requirements.txt
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -v
+          python - <<'PY'
+          import torch
+          print(f"PyTorch: {torch.__version__}")
+          print(f"CUDA available: {torch.cuda.is_available()}")
+          assert not torch.cuda.is_available(), "CI must use the CPU-only PyTorch build"
+          PY
+
+      - name: Compile all Python source and tests
+        run: python -m compileall -q src tests
+
+      - name: Audit dependencies
+        run: |
+          set -o pipefail
+          python -m pip_audit -r requirements.txt 2>&1 | tee ci-logs/dependency-audit.log
+
+      - name: Run complete unit and regression test suite
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -v 2>&1 | tee ci-logs/unit-tests.log
+
+      - name: Validate dataset provenance and hashes
+        run: |
+          set -o pipefail
+          python -m src.provenance --dataset data/raw/train.txt --manifest data/provenance.json 2>&1 | tee ci-logs/provenance.log
+
       - name: Run CPU training smoke test
         run: |
-          python -m src.train --corpus data/raw/train.txt --checkpoint /tmp/ci-model.safetensors --metadata /tmp/ci-model.metadata.json --epochs 1 --max-steps 2 --batch-size 4 --context-length 16 --embedding-dim 32 --heads 4 --layers 1 --dropout 0 --threads 2
+          set -o pipefail
+          python -m src.train \
+            --corpus data/raw/train.txt \
+            --checkpoint /tmp/ci-model.safetensors \
+            --metadata /tmp/ci-model.metadata.json \
+            --epochs 1 --max-steps 2 --batch-size 4 \
+            --context-length 16 --embedding-dim 32 --heads 4 \
+            --layers 1 --dropout 0 --threads 2 \
+            2>&1 | tee ci-logs/training-smoke.log
           test -s /tmp/ci-model.safetensors
           test -s /tmp/ci-model.metadata.json
-      - name: Run bilingual generation smoke test
+
+      - name: Run Sinhala-English generation smoke tests
         run: |
-          python -m src.generate --checkpoint /tmp/ci-model.safetensors --metadata /tmp/ci-model.metadata.json --prompt "Hello ආයුබෝවන්" --max-new-tokens 8 --seed 42
-      - name: Verify dataset provenance and hashes
-        run: python -m src.provenance --dataset data/raw/train.txt --manifest data/provenance.json
-      - name: Check for accidentally committed secrets
+          set -o pipefail
+          python -m src.generate \
+            --checkpoint /tmp/ci-model.safetensors \
+            --metadata /tmp/ci-model.metadata.json \
+            --prompt "Hello ආයුබෝවන්" \
+            --max-new-tokens 12 --seed 42 \
+            2>&1 | tee ci-logs/generation-smoke.log
+
+      - name: Scan repository for accidentally committed secrets
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload safe test report
+
+      - name: Write CI summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Sinhala-English LLM CI report"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Event: \`${GITHUB_EVENT_NAME}\`"
+            echo "- Python: \`$(python --version 2>&1)\`"
+            echo
+            echo "See the step results above and attached logs for failures."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic logs and smoke-test checkpoints
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: secure-ci-report-${{ github.run_id }}
-          path: data/provenance.json
+          name: complete-llm-ci-${{ github.run_id }}
+          path: |
+            ci-logs/
+            /tmp/ci-model.safetensors
+            /tmp/ci-model.metadata.json
+            data/provenance.json
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
