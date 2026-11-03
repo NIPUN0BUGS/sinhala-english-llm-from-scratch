@@ -1,4 +1,4 @@
-name: Hourly Sinhala-English LLM data, tests, and training
+name: Automation / Scheduled Model Training
 
 on:
   schedule:
@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  refresh-train-test:
+  refresh-and-train:
+    name: Refresh Data, Train, and Evaluate
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:

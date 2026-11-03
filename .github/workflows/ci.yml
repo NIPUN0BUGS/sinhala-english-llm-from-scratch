@@ -1,4 +1,4 @@
-name: Sinhala-English LLM Complete CI
+name: CI / Complete Validation
 
 on:
   push:
@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  complete-validation:
-    name: Complete LLM validation (required)
+  validate:
+    name: Complete Validation (required)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
