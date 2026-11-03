@@ -9,11 +9,16 @@ from safetensors.torch import load_file, save_file
 
 
 def save_safetensors(state_dict: Mapping[str, torch.Tensor], path: str | Path) -> None:
-    """Save a state dict as non-pickle Safetensors; tensors are detached and moved to CPU."""
+    """Save a state dict as non-pickle Safetensors, copying each tensor to independent CPU storage.
+
+    Cloning is intentional: models may tie weights (for example, token embeddings and
+    the language-model output head). Safetensors' low-level save_file rejects tensors
+    that share storage, while independent copies preserve their values on disk.
+    """
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     safe_state = {
-        key: value.detach().cpu().contiguous()
+        key: value.detach().to(device="cpu").contiguous().clone()
         for key, value in state_dict.items()
         if isinstance(key, str) and isinstance(value, torch.Tensor)
     }
