@@ -96,10 +96,25 @@ jobs:
             --max-new-tokens 12 --seed 42 \
             2>&1 | tee ci-logs/generation-smoke.log
 
-      - name: Scan repository for accidentally committed secrets
-        uses: gitleaks/gitleaks-action@v2
+      - name: Install pinned Gitleaks CLI
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.24.3"
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Scan fetched Git history for secrets
+        run: |
+          set -o pipefail
+          gitleaks detect \
+            --source . \
+            --log-opts="--all" \
+            --redact \
+            --verbose \
+            --exit-code 1 \
+            2>&1 | tee ci-logs/gitleaks.log
 
       - name: Write CI summary
         if: always()
