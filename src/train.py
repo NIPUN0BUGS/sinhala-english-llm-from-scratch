@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 
 from src.dataset import NextTokenDataset
 from src.model import CausalTransformerLanguageModel
-from src.safe_checkpoint import save_safetensors
+from src.safe_checkpoint import load_safetensors, save_safetensors
 from src.tokenizer import CharacterTokenizer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--threads", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--resume-checkpoint", type=Path, default=None)
+    parser.add_argument("--resume-metadata", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -88,7 +90,20 @@ def main() -> None:
     torch.set_num_threads(args.threads)
     device = torch.device("cpu")
 
-    tokenizer = CharacterTokenizer().fit(text)
+    resume_metadata = None
+    if args.resume_checkpoint:
+        metadata_path = args.resume_metadata or args.resume_checkpoint.with_name(args.resume_checkpoint.name.replace(".safetensors", ".metadata.json"))
+        if not args.resume_checkpoint.is_file() or not metadata_path.is_file():
+            raise FileNotFoundError("Resume checkpoint and metadata must both exist.")
+        resume_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if resume_metadata.get("format") != "safetensors" or resume_metadata.get("model_type") != "CausalTransformerLanguageModel":
+            raise ValueError("Unsupported resume checkpoint.")
+        tokenizer = CharacterTokenizer(unknown_token=resume_metadata["unknown_token"])
+        tokenizer._id_to_char = list(resume_metadata["vocabulary"])
+        tokenizer._char_to_id = {char: index for index, char in enumerate(tokenizer._id_to_char)}
+        print("Resuming saved weights; unseen characters map to the saved unknown token.")
+    else:
+        tokenizer = CharacterTokenizer().fit(text)
     token_ids = tokenizer.encode(text)
     if len(token_ids) < 20:
         raise ValueError("Corpus is too short; provide at least 20 characters.")
@@ -117,6 +132,13 @@ def main() -> None:
         max_seq_len=context_length,
         dropout=args.dropout,
     ).to(device)
+    if resume_metadata:
+        expected = (resume_metadata["embedding_dim"], resume_metadata["heads"], resume_metadata["layers"])
+        actual = (args.embedding_dim, args.heads, args.layers)
+        if expected != actual:
+            raise ValueError(f"Resume architecture {expected} does not match {actual}.")
+        model.load_state_dict(load_safetensors(args.resume_checkpoint))
+        print(f"Loaded previous weights: {args.resume_checkpoint}")
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
@@ -199,6 +221,7 @@ def main() -> None:
                     "optimizer": "AdamW",
                     "scheduler": "ReduceLROnPlateau",
                     "gradient_clip_norm": 1.0,
+                    "resumed_from": str(args.resume_checkpoint) if args.resume_checkpoint else None,
                 },
             }
             args.metadata.write_text(
