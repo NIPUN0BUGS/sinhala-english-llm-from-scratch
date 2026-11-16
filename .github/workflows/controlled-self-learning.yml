@@ -1,0 +1,96 @@
+name: Automation / Controlled Self-Learning
+
+on:
+  schedule:
+    - cron: "25 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: controlled-self-learning
+  cancel-in-progress: false
+
+jobs:
+  collect-train-evaluate:
+    name: Collect, Continue Training, and Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout self-learning branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/controlled-self-learning
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
+          python -m pip install -r requirements.txt
+          python -m pip check
+
+      - name: Collect attributed Sinhala and English data
+        run: python -m src.collect_wikipedia --pages-per-language 8
+
+      - name: Validate collection provenance and corpus size
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = Path("data/raw/self_learning_manifest.jsonl")
+          corpus = Path("data/raw/self_learning_corpus.txt")
+          if not manifest.is_file() or not corpus.is_file():
+              raise SystemExit("Collector did not create corpus and manifest")
+          records = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+          if not records:
+              raise SystemExit("No attributed source records are available")
+          for item in records:
+              required = ("language", "title", "url", "license", "license_url", "text")
+              if any(not item.get(key) for key in required):
+                  raise SystemExit("A source record is missing attribution metadata")
+              if item["language"] not in {"si", "en"} or item["license"] != "CC BY-SA 4.0":
+                  raise SystemExit("Unexpected language or licence; manual review required")
+          print(f"Validated {len(records)} records and {len(corpus.read_text(encoding='utf-8'))} corpus characters")
+          PY
+
+      - name: Run unit and regression tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Continue training and promote only if validation improves
+        run: python -m src.self_learning --epochs 3 --threads 2
+
+      - name: Upload corpus, attribution and checkpoint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-learning-${{ github.run_id }}
+          path: |
+            data/raw/self_learning_corpus.txt
+            data/raw/self_learning_manifest.jsonl
+            checkpoints/self_learning.safetensors
+            checkpoints/self_learning.metadata.json
+            checkpoints/self_learning_latest.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Persist corpus and accepted checkpoint
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/raw/self_learning_corpus.txt data/raw/self_learning_manifest.jsonl checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update self-learning corpus and validated checkpoint"
+            git push origin HEAD:feature/controlled-self-learning
+          else
+            echo "No corpus or checkpoint changes to persist."
+          fi
