@@ -109,6 +109,7 @@ jobs:
         run: |
           set -o pipefail
           gitleaks detect \
+            --config .gitleaks.toml \
             --source . \
             --log-opts="--all" \
             --redact \
