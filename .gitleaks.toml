@@ -1,0 +1,7 @@
+# Narrow exception for a historical, non-secret Docker CI test fixture.
+[[allowlists]]
+description = "Historical ephemeral CI test key; not a production credential"
+condition = "AND"
+commits = ["c8c6e941878abece7a22222726b3b1dcba2475d0"]
+paths = ['''\.github/workflows/feature-branch-tests-cron\.yml''']
+regexes = ['''ci-test-key''']
