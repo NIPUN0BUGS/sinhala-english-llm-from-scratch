@@ -61,7 +61,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker run --detach --rm --name tiny-llm-api-ci -e TINY_LLM_API_KEY=ci-test-key -p 8766:8766 tiny-sinhala-english-llm:ci
+          CI_TEST_API_KEY="ci-test-key"
+          docker run --detach --rm --name tiny-llm-api-ci -e "TINY_LLM_API_KEY=$CI_TEST_API_KEY" -p 8766:8766 tiny-sinhala-english-llm:ci
           cleanup() { docker stop tiny-llm-api-ci >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           healthy=false
@@ -78,7 +79,7 @@ jobs:
             docker logs tiny-llm-api-ci
             exit 1
           fi
-          curl --fail --silent --show-error -X POST http://127.0.0.1:8766/generate -H "Content-Type: application/json" -H "X-API-Key: ci-test-key" -d '{"prompt":"Hi","max_new_tokens":1,"temperature":0.8,"top_k":1}'
+          curl --fail --silent --show-error -X POST http://127.0.0.1:8766/generate -H "Content-Type: application/json" -H "X-API-Key: $CI_TEST_API_KEY" -d '{"prompt":"Hi","max_new_tokens":1,"temperature":0.8,"top_k":1}'
           echo
           status=$(curl --silent --output /dev/null --write-out "%{http_code}" -X POST http://127.0.0.1:8766/generate -H "Content-Type: application/json" -d '{"prompt":"Hi","max_new_tokens":1}')
           if [ "$status" != "401" ]; then
