@@ -1,4 +1,4 @@
 # Python 3.12; CPU-first training and safe checkpoint support.
 numpy==2.2.6
-torch==2.15.0
+torch==2.14.1
 safetensors==0.6.2
