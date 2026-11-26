@@ -87,7 +87,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/raw/self_learning_corpus.txt data/raw/self_learning_manifest.jsonl checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json
+          git add data/raw/self_learning_corpus.txt data/raw/self_learning_manifest.jsonl
+          # Checkpoints are intentionally ignored for local development; force-add only the validated self-learning outputs.
+          git add -f checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update self-learning corpus and validated checkpoint"
             git push origin HEAD:feature/controlled-self-learning
