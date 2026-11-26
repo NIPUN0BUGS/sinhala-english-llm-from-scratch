@@ -91,18 +91,18 @@
   "layers": 2,
   "dropout": 0.1,
   "context_length": 64,
-  "best_validation_loss": 3.0464016769243325,
+  "best_validation_loss": 2.9747511085711027,
   "best_epoch": 3,
   "training": {
     "seed": 42,
-    "steps": 657,
+    "steps": 960,
     "epochs_requested": 3,
     "corpus": "/home/runner/work/sinhala-english-llm-from-scratch/sinhala-english-llm-from-scratch/data/raw/self_learning_corpus.txt",
-    "train_tokens": 1813,
-    "validation_tokens": 202,
+    "train_tokens": 2621,
+    "validation_tokens": 292,
     "optimizer": "AdamW",
     "scheduler": "ReduceLROnPlateau",
     "gradient_clip_norm": 1.0,
-    "resumed_from": null
+    "resumed_from": "/home/runner/work/sinhala-english-llm-from-scratch/sinhala-english-llm-from-scratch/checkpoints/self_learning.safetensors"
   }
 }
