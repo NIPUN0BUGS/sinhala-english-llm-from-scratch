@@ -27,6 +27,25 @@ class SelfLearningSupportTests(unittest.TestCase):
         self.assertEqual(LICENSE, "CC BY-SA 4.0")
         self.assertTrue(LICENSE_URL.startswith("https://creativecommons.org/"))
 
+    @patch("src.collect_wikipedia.time.sleep")
+    @patch("src.collect_wikipedia.urllib.request.urlopen")
+    def test_fetch_random_retries_rate_limit(self, mocked_open, mocked_sleep):
+        from urllib.error import HTTPError
+        payload = {"query": {"pages": [{
+            "title": "Language model",
+            "fullurl": "https://en.wikipedia.org/wiki/Language_model",
+            "extract": "A language model is a probability distribution over sequences of words. " * 5,
+        }]}}
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self): return json.dumps(payload).encode("utf-8")
+        mocked_open.side_effect = [HTTPError("url", 429, "rate limited", {}, None), Response()]
+        record = fetch_random("en", max_retries=2)
+        self.assertEqual(record["language"], "en")
+        self.assertEqual(mocked_open.call_count, 2)
+        mocked_sleep.assert_called_once()
+
     @patch("src.collect_wikipedia.urllib.request.urlopen")
     def test_fetch_random_returns_english_page(self, mocked_open):
         payload = {"query": {"pages": [{
