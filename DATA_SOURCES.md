@@ -6,7 +6,7 @@ The scheduled GitHub Actions workflow collects data on GitHub-hosted runners. It
 
 | Source | Language | Published licence | Use in the collector |
 |---|---|---|---|
-| [Minuri Sinhala CulturaX corpus](https://huggingface.co/datasets/Minuri/sinhala-corpus-culturax) | Sinhala | CC BY-SA 4.0 | Text rows from the `train` split |
+| [Minuri NSINA sentence corpus](https://huggingface.co/datasets/Minuri/nsina-sentences-raw) | Sinhala | CC BY-SA 4.0 | Text rows from the `train` split |
 | [Sri Lanka Parliament Hansard trilingual dataset](https://huggingface.co/datasets/keshan/lk_hansard_trilingual) | Sinhala and English | CC BY 4.0 | Sinhala and English splits |
 | [Sinhala Wikipedia](https://si.wikipedia.org/) and [English Wikipedia](https://en.wikipedia.org/) | Sinhala and English | CC BY-SA 4.0 | Smaller top-up collection |
 
@@ -22,7 +22,7 @@ The first two sources are accessed through the Hugging Face Dataset Viewer API. 
 
 ## Sources deliberately not used
 
-The LIRNEasia Facebook Decade Corpora page describes a CC BY 4.0 release, but its repository README marks the large corpora as deprecated and removed from public access. The pipeline therefore does not assume those files can be downloaded. Large mixed-source corpora are also not added until their component licences and attribution requirements can be retained safely.
+The LIRNEasia Facebook Decade Corpora page describes a CC BY 4.0 release, but its repository README marks the large corpora as deprecated and removed from public access. The pipeline therefore does not assume those files can be downloaded. The CulturaX-derived Sinhala corpus was deliberately excluded: its dataset card states that the upstream mC4/OSCAR source requires a Hugging Face contact-information agreement. We use the separately documented NSINA-derived source instead. Large mixed-source corpora are also not added until their component licences and attribution requirements can be retained safely.
 
 ## Speed and target
 
