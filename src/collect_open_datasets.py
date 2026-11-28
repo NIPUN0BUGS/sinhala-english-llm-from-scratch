@@ -37,6 +37,7 @@ SOURCES = (
         "license": "CC BY-SA 4.0",
         "attribution": "Minuri; original source sinhala-nlp/NSINA (Hettiarachchi et al., 2024)",
         "description": "Sinhala NSINA-derived corpus",
+        "target_chars": 550_000,
     },
     {
         "dataset": "keshan/lk_hansard_trilingual",
@@ -46,6 +47,7 @@ SOURCES = (
         "license": "CC BY 4.0",
         "attribution": "keshan; Sri Lanka Parliament Hansard source material",
         "description": "Sri Lanka Parliament Hansard (Sinhala)",
+        "target_chars": 150_000,
     },
     {
         "dataset": "keshan/lk_hansard_trilingual",
@@ -55,6 +57,7 @@ SOURCES = (
         "license": "CC BY 4.0",
         "attribution": "keshan; Sri Lanka Parliament Hansard source material",
         "description": "Sri Lanka Parliament Hansard (English)",
+        "target_chars": 550_000,
     },
 )
 
@@ -220,11 +223,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target-chars-per-source", type=int, default=550_000)
     parser.add_argument("--max-rows-per-source", type=int, default=12_000)
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--output", type=Path, default=ROOT / "data/raw/self_learning_corpus.txt")
     parser.add_argument("--manifest", type=Path, default=ROOT / "data/raw/self_learning_manifest.jsonl")
     args = parser.parse_args()
-    if args.target_chars_per_source < 1 or args.max_rows_per_source < 100 or args.workers not in range(1, 9):
+    if args.target_chars_per_source < 1 or args.max_rows_per_source < 100 or args.workers not in range(1, 17):
         raise ValueError("Invalid target, max rows, or worker count (1-8).")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -234,7 +237,7 @@ def main() -> None:
     with args.output.open("a", encoding="utf-8") as output, args.manifest.open("a", encoding="utf-8") as manifest:
         for source in SOURCES:
             added = collect_source(
-                source, args.target_chars_per_source, args.max_rows_per_source,
+                source, source.get("target_chars", args.target_chars_per_source), args.max_rows_per_source,
                 hashes, output, manifest, args.workers,
             )
             totals[source["language"]] += added
