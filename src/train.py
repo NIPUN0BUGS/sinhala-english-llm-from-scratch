@@ -101,7 +101,9 @@ def main() -> None:
         tokenizer = CharacterTokenizer(unknown_token=resume_metadata["unknown_token"])
         tokenizer._id_to_char = list(resume_metadata["vocabulary"])
         tokenizer._char_to_id = {char: index for index, char in enumerate(tokenizer._id_to_char)}
-        print("Resuming saved weights; unseen characters map to the saved unknown token.")
+        old_vocab_size = tokenizer.vocab_size
+        tokenizer.extend(text)
+        print(f"Resuming saved weights; expanded vocabulary from {old_vocab_size} to {tokenizer.vocab_size} tokens.")
     else:
         tokenizer = CharacterTokenizer().fit(text)
     token_ids = tokenizer.encode(text)
@@ -137,8 +139,15 @@ def main() -> None:
         actual = (args.embedding_dim, args.heads, args.layers)
         if expected != actual:
             raise ValueError(f"Resume architecture {expected} does not match {actual}.")
-        model.load_state_dict(load_safetensors(args.resume_checkpoint))
-        print(f"Loaded previous weights: {args.resume_checkpoint}")
+        saved_state = load_safetensors(args.resume_checkpoint)
+        # Preserve every old token row and keep the newly initialized rows for new characters.
+        for key in ("token_embedding.weight", "lm_head.weight"):
+            if saved_state[key].shape[0] < model.state_dict()[key].shape[0]:
+                expanded = model.state_dict()[key].clone()
+                expanded[:saved_state[key].shape[0]] = saved_state[key]
+                saved_state[key] = expanded
+        model.load_state_dict(saved_state)
+        print(f"Loaded previous weights with vocabulary expansion: {args.resume_checkpoint}")
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
