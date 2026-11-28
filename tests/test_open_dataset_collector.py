@@ -14,7 +14,7 @@ class OpenDatasetCollectorTests(unittest.TestCase):
         self.assertEqual(
             {(item["dataset"], item["split"], item["language"], item["license"]) for item in SOURCES},
             {
-                ("Minuri/sinhala-corpus-culturax", "train", "si", "CC BY-SA 4.0"),
+                ("Minuri/nsina-sentences-raw", "train", "si", "CC BY-SA 4.0"),
                 ("keshan/lk_hansard_trilingual", "sinhala", "si", "CC BY 4.0"),
                 ("keshan/lk_hansard_trilingual", "english", "en", "CC BY 4.0"),
             },
