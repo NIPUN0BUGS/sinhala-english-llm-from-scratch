@@ -1,6 +1,9 @@
 name: Automation / Controlled Self-Learning
 
 on:
+  push:
+    branches:
+      - feature/controlled-self-learning
   schedule:
     - cron: "25 2 * * *"
   workflow_dispatch:
