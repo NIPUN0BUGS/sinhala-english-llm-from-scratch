@@ -10,7 +10,7 @@ The scheduled GitHub Actions workflow collects data on GitHub-hosted runners. It
 | [Sri Lanka Parliament Hansard trilingual dataset](https://huggingface.co/datasets/keshan/lk_hansard_trilingual) | Sinhala and English | CC BY 4.0 | Sinhala and English splits |
 | [Sinhala Wikipedia](https://si.wikipedia.org/) and [English Wikipedia](https://en.wikipedia.org/) | Sinhala and English | CC BY-SA 4.0 | Smaller top-up collection |
 
-The first two sources are accessed through the Hugging Face Dataset Viewer API. The collector fetches bounded batches of at most 100 rows per API request, uses four concurrent requests by default, checks the expected language script, normalizes text, and removes exact normalized-text duplicates. It records the dataset, split, row identifier, source metadata, attribution, source URL and licence on each manifest entry.
+The reviewed sources are accessed through the Hugging Face Dataset Viewer API. The collector fetches bounded batches of at most 100 rows per API request, uses eight concurrent requests by default, checks the expected language script, normalizes text, and removes exact normalized-text duplicates. It records the dataset, split, row identifier, source metadata, attribution, source URL and licence on each manifest entry.
 
 ## Attribution and licence handling
 
@@ -26,6 +26,6 @@ The LIRNEasia Facebook Decade Corpora page describes a CC BY 4.0 release, but it
 
 ## Speed and target
 
-The collector uses batched dataset API requests rather than waiting between individual random Wikipedia page requests. Four concurrent requests are used by default. This is an engineering throughput improvement, not a promise of exactly 20x speed: actual speed depends on dataset-server availability, rate limits, response sizes and GitHub Actions capacity.
+The collector uses batched dataset API requests rather than waiting between individual random Wikipedia page requests. Eight concurrent requests are used by default. This is an engineering throughput improvement, not a promise of exactly 20x speed: actual speed depends on dataset-server availability, rate limits, response sizes and GitHub Actions capacity.
 
 The workflow measures the resulting manifest using the project's current character-level tokenizer metric. It does not begin the gated self-learning training step until the total reaches 1,000,000 Unicode character-level tokens and each language reaches at least 100,000 tokens.
