@@ -14,6 +14,15 @@ class SelfLearningSupportTests(unittest.TestCase):
         encoded = restored.encode("Hello 🧪")
         self.assertEqual(encoded[-1], restored._char_to_id[restored.unknown_token])
 
+    def test_vocabulary_extension_preserves_existing_ids(self):
+        tokenizer = CharacterTokenizer().fit("Sinhala")
+        old_ids = dict(tokenizer._char_to_id)
+        tokenizer.extend("English සිංහල")
+        for char, token_id in old_ids.items():
+            self.assertEqual(tokenizer._char_to_id[char], token_id)
+        self.assertIn("E", tokenizer._char_to_id)
+        self.assertIn("ි", tokenizer._char_to_id)
+
     def test_wikipedia_attribution_license_is_explicit(self):
         self.assertEqual(LICENSE, "CC BY-SA 4.0")
         self.assertTrue(LICENSE_URL.startswith("https://creativecommons.org/"))
