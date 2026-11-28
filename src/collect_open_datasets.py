@@ -30,13 +30,13 @@ LICENSES = {
 # Keep each source's original licence and attribution with every extracted row.
 SOURCES = (
     {
-        "dataset": "Minuri/sinhala-corpus-culturax",
+        "dataset": "Minuri/nsina-sentences-raw",
         "config": "default",
         "split": "train",
         "language": "si",
         "license": "CC BY-SA 4.0",
-        "attribution": "Minuri; see dataset card and its source metadata",
-        "description": "Sinhala CulturaX-derived corpus",
+        "attribution": "Minuri; original source sinhala-nlp/NSINA (Hettiarachchi et al., 2024)",
+        "description": "Sinhala NSINA-derived corpus",
     },
     {
         "dataset": "keshan/lk_hansard_trilingual",
