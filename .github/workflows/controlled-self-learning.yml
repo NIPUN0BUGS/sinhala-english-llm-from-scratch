@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/controlled-self-learning
+    paths-ignore:
+      - "data/raw/**"
+      - "checkpoints/**"
   schedule:
     - cron: "25 2 * * *"
   workflow_dispatch:
@@ -99,6 +102,7 @@ jobs:
           git add -f checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update self-learning corpus and validated checkpoint"
+            git pull --rebase origin feature/controlled-self-learning
             git push origin HEAD:feature/controlled-self-learning
           else
             echo "No corpus or checkpoint changes to persist."
