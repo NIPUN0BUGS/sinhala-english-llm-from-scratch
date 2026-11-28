@@ -1,6 +1,7 @@
 {
   "result": "promoted",
-  "baseline_validation_loss": 2.804051793381734,
-  "candidate_validation_loss": 2.676604499342282,
+  "baseline_validation_loss": 10.61350403553487,
+  "candidate_validation_loss": 2.535156828211353,
+  "vocabulary_size": 186,
   "corpus": "/home/runner/work/sinhala-english-llm-from-scratch/sinhala-english-llm-from-scratch/data/raw/self_learning_corpus.txt"
 }
