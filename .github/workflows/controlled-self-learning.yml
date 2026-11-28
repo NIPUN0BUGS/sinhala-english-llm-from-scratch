@@ -59,6 +59,10 @@ jobs:
                   raise SystemExit("A source record is missing attribution metadata")
               if item["language"] not in {"si", "en"} or item["license"] != "CC BY-SA 4.0":
                   raise SystemExit("Unexpected language or licence; manual review required")
+          counts = {language: sum(item["language"] == language for item in records) for language in ("si", "en")}
+          print(f"Language record counts: {counts}")
+          if min(counts.values()) < 1:
+              raise SystemExit("Both Sinhala (si) and English (en) records are required; refusing one-language training.")
           print(f"Validated {len(records)} records and {len(corpus.read_text(encoding='utf-8'))} corpus characters")
           PY
 
