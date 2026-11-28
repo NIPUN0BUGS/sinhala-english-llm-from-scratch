@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/controlled-self-learning
+      - feature/multisource-fast-collection
     paths-ignore:
       - "data/raw/**"
       - "checkpoints/**"
@@ -27,7 +28,7 @@ jobs:
       - name: Checkout self-learning branch
         uses: actions/checkout@v4
         with:
-          ref: feature/controlled-self-learning
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
           persist-credentials: true
 
@@ -121,8 +122,8 @@ jobs:
           git add -f checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json checkpoints/data_budget.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update self-learning corpus and validated checkpoint"
-            git pull --rebase origin feature/controlled-self-learning
-            git push origin HEAD:feature/controlled-self-learning
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           else
             echo "No corpus or checkpoint changes to persist."
           fi
