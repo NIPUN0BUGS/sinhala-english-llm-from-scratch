@@ -1,0 +1,13 @@
+{
+  "tokenizer": "Unicode character-level (one Unicode code point per token)",
+  "target_tokens": 1000000,
+  "total_tokens": 156541,
+  "progress": 0.156541,
+  "language_tokens": {
+    "si": 87034,
+    "en": 69507
+  },
+  "minimum_tokens_per_language": 100000,
+  "records": 243,
+  "ready": false
+}
