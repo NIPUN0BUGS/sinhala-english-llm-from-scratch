@@ -42,7 +42,7 @@ jobs:
           python -m pip check
 
       - name: Collect attributed Sinhala and English data
-        run: python -m src.collect_wikipedia --pages-per-language 8
+        run: python -m src.collect_wikipedia --pages-per-language 15 --max-attempts-per-page 6 --request-delay 1.0
 
       - name: Validate collection provenance and corpus size
         run: |
