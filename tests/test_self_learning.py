@@ -23,7 +23,6 @@ class SelfLearningSupportTests(unittest.TestCase):
         self.assertIn("E", tokenizer._char_to_id)
         self.assertIn("ි", tokenizer._char_to_id)
 
-
     def test_one_million_token_budget_requires_both_languages(self):
         import tempfile
         from pathlib import Path
@@ -34,12 +33,12 @@ class SelfLearningSupportTests(unittest.TestCase):
                 {"language": "si", "text": "ස" * 500_000},
                 {"language": "en", "text": "a" * 500_000},
             ]
-            manifest.write_text("\\n".join(json.dumps(item, ensure_ascii=False) for item in records), encoding="utf-8")
+            manifest.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in records), encoding="utf-8")
             result = measure(manifest, 1_000_000, 100_000)
             self.assertTrue(result["ready"])
             self.assertEqual(result["total_tokens"], 1_000_000)
             records[1]["text"] = "a" * 10
-            manifest.write_text("\\n".join(json.dumps(item, ensure_ascii=False) for item in records), encoding="utf-8")
+            manifest.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in records), encoding="utf-8")
             self.assertFalse(measure(manifest, 1_000_000, 100_000)["ready"])
 
     def test_wikipedia_attribution_license_is_explicit(self):
