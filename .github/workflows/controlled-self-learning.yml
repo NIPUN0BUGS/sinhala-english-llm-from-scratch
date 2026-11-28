@@ -44,8 +44,11 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip check
 
-      - name: Collect attributed Sinhala and English data
-        run: python -m src.collect_wikipedia --pages-per-language 100 --max-attempts-per-page 4 --request-delay 1.0
+      - name: Collect reviewed open datasets in parallel batches
+        run: python -m src.collect_open_datasets --target-chars-per-source 550000 --max-rows-per-source 12000 --workers 4
+
+      - name: Top up from attributed Sinhala and English Wikipedia
+        run: python -m src.collect_wikipedia --pages-per-language 20 --max-attempts-per-page 4 --request-delay 0.5
 
       - name: Validate collection provenance and corpus size
         run: |
@@ -63,8 +66,14 @@ jobs:
               required = ("language", "title", "url", "license", "license_url", "text")
               if any(not item.get(key) for key in required):
                   raise SystemExit("A source record is missing attribution metadata")
-              if item["language"] not in {"si", "en"} or item["license"] != "CC BY-SA 4.0":
+              if item["language"] not in {"si", "en"} or item["license"] not in {"CC BY-SA 4.0", "CC BY 4.0"}:
                   raise SystemExit("Unexpected language or licence; manual review required")
+              if item.get("source_dataset") and not item.get("source_attribution"):
+                  raise SystemExit("Open dataset row is missing source attribution")
+              if item.get("source_dataset") and not item["url"].startswith("https://huggingface.co/datasets/"):
+                  raise SystemExit("Open dataset record has an unexpected source URL")
+              if not item.get("source_dataset") and "wikipedia.org" not in item["url"]:
+                  raise SystemExit("Non-dataset record has an unexpected source URL")
           counts = {language: sum(item["language"] == language for item in records) for language in ("si", "en")}
           print(f"Language record counts: {counts}")
           if min(counts.values()) < 1:
