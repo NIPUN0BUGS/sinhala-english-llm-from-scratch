@@ -22,6 +22,15 @@ class CharacterTokenizer:
         self._char_to_id = {char: idx for idx, char in enumerate(chars)}
         return self
 
+    def extend(self, text: str) -> "CharacterTokenizer":
+        """Append unseen characters without changing any existing token IDs."""
+        if not self._char_to_id:
+            raise RuntimeError("Call fit(text) before extend(text).")
+        for char in sorted(set(text).difference(self._char_to_id)):
+            self._char_to_id[char] = len(self._id_to_char)
+            self._id_to_char.append(char)
+        return self
+
     @property
     def vocab_size(self) -> int:
         return len(self._id_to_char)
