@@ -45,7 +45,7 @@ jobs:
           python -m pip check
 
       - name: Collect attributed Sinhala and English data
-        run: python -m src.collect_wikipedia --pages-per-language 15 --max-attempts-per-page 6 --request-delay 1.0
+        run: python -m src.collect_wikipedia --pages-per-language 100 --max-attempts-per-page 4 --request-delay 1.0
 
       - name: Validate collection provenance and corpus size
         run: |
@@ -75,8 +75,17 @@ jobs:
       - name: Run unit and regression tests
         run: python -m unittest discover -s tests -v
 
+      - name: Measure progress toward one million training tokens
+        id: token-budget
+        run: python -m src.data_budget --target 1000000 --min-per-language 100000
+
       - name: Continue training and promote only if validation improves
+        if: steps.token-budget.outputs.ready == 'true'
         run: python -m src.self_learning --epochs 3 --threads 2
+
+      - name: Explain training gate
+        if: steps.token-budget.outputs.ready != 'true'
+        run: echo "Training is safely paused until the corpus reaches 1,000,000 character tokens, including at least 100,000 from each language. The growing corpus will still be persisted."
 
       - name: Upload corpus, attribution and checkpoint report
         if: always()
@@ -89,6 +98,7 @@ jobs:
             checkpoints/self_learning.safetensors
             checkpoints/self_learning.metadata.json
             checkpoints/self_learning_latest.json
+            checkpoints/data_budget.json
           if-no-files-found: ignore
           retention-days: 30
 
@@ -99,7 +109,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/raw/self_learning_corpus.txt data/raw/self_learning_manifest.jsonl
           # Checkpoints are intentionally gitignored; persist only validated self-learning outputs.
-          git add -f checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json
+          git add -f checkpoints/self_learning.safetensors checkpoints/self_learning.metadata.json checkpoints/self_learning_latest.json checkpoints/data_budget.json
           if ! git diff --cached --quiet; then
             git commit -m "chore: update self-learning corpus and validated checkpoint"
             git pull --rebase origin feature/controlled-self-learning
